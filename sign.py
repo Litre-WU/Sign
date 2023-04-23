@@ -56,11 +56,11 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 携程/ctripSign(传入账户的cticket值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX")):
     result = {"code": 400, "msg": "请检查路由路径!"}
-    path_dict = {"csairSign": csairSign, "ctripSign": ctripSign}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         result.update({"code": 200, "msg": f'{path} {token} 已更新'})
@@ -203,8 +203,8 @@ async def csairSign(**kwargs):
             "chanel": "ss",
             "lang": "zh"
         },
-        "data": dumps({"activityType":"sign","channel":"app"}),
-	"headers": {"Content-Type": "application/json"},
+        "data": dumps({"activityType": "sign", "channel": "app"}),
+        "headers": {"Content-Type": "application/json"},
         "cookies": {"sign_user_token": token}
     }
     res = await req(**meta)
@@ -251,6 +251,42 @@ async def csairSign(**kwargs):
                 result.update({"msg": f'{token} {info.get("respMsg", "")}'})
         except Exception as e:
             logger.error(f'{text} {e}')
+            result.update({"msg": f"南航签到程序异常 {kwargs}"})
+    # 钉钉通知
+    logger.info(result)
+    await dingAlert(**result)
+    return result
+
+
+# 川航签到
+async def sichuanairSign(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入access-token',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'sichuanair_{token}', token)
+    meta = {
+        "method": "POST",
+        "url": "https://fx.sichuanair.com/api/v1/sign/get-sign-rotation",
+        "params": {
+            "access-token": token
+        },
+    }
+    res = await req(**meta)
+    if res.status_code == 200:
+        try:
+            info = res.json()
+            if info.get("code") == 200:
+                result.update({"code": 200, "msg": f'川航用户：{token} 今天已签到'})
+            else:
+                # cache.delete(f'sichuanair_{token}')
+                result.update({"msg": f'{token} {info.get("message", "")}'})
+        except Exception as e:
+            logger.error(f'川航签到程序异常 {e}')
             result.update({"msg": f"南航签到程序异常 {kwargs}"})
     # 钉钉通知
     logger.info(result)
@@ -330,8 +366,11 @@ async def crontab_task(**kwargs):
              k.startswith("jd_")]
     # 南航任务
     tasks += [asyncio.create_task(csairSign(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("csai_")]
+    # 川航任务
+    tasks += [asyncio.create_task(sichuanairSign(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("sichuanair_")]
     # 携程任务
     tasks += [asyncio.create_task(ctripSign(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("ctrip_")]
+
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
     return result_list
