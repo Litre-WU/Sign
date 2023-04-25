@@ -7,8 +7,10 @@
 
 `uvicorn --host 0.0.0.0 --port 80`
 
-打开 http://127.0.0.1:8081/docs 添加账户token
+打开 http://127.0.0.1:8081/docs
+
+通过接口添加账户token等
+
+添加后可用crontab定时任务执行该脚本(后续改为apschedule调度运行)
 
 后续增加其它平台
-
-目前可使用crontab添加定时任务，后续增加apschedule调度运行
