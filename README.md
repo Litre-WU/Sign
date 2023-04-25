@@ -7,7 +7,7 @@
 
 `uvicorn --host 0.0.0.0 --port 80`
 
-打开http://127.0.0.1:8081/docs添加账户token
+打开 http://127.0.0.1:8081/docs 添加账户token
 
 后续增加其它平台
 
