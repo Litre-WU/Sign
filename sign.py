@@ -15,6 +15,34 @@ import hashlib
 from base64 import b64encode
 from pathlib import Path
 
+# # 使用apscheduler 调用定时任务
+# from pytz import utc
+# from datetime import datetime, timedelta
+# from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.schedulers.asyncio import AsyncIOScheduler
+# from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
+# from apscheduler.jobstores.redis import RedisJobStore
+# 
+# scheduler = AsyncIOScheduler(
+#     jobstores={
+#         "default": RedisJobStore(**{
+#             "host": '127.0.0.1',
+#             "port": 6379,
+#             "db": 10,
+#             "max_connections": 10
+#         })
+#     },
+#     executorsexecutors={
+#         'default': ThreadPoolExecutor(20),
+#         'processpool': ProcessPoolExecutor(5),
+# 
+#     },
+#     job_defaultsjob_defaults={
+#         'coalesce': False,
+#         'max_instances': 3
+#     },
+#     timezone=utc)
+
 cache = Cache(str(Path(__file__).parent / "tmp"))
 
 app = FastAPI(title="定时脚本")
@@ -36,6 +64,12 @@ async def startup_event():
         if k.startswith("jd_"):
             if not cache[k]:
                 cache.delete("test_pageId")
+    # try:
+    #     print(scheduler.get_jobs())
+    #     # scheduler.remove_all_jobs()
+    #     scheduler.start()
+    # except Exception as e:
+    #     print(f'定时任务启动异常{e}')
 
 
 # 程序停止
@@ -51,6 +85,7 @@ async def api(request: Request, background_tasks: BackgroundTasks,
               pt_key: Union[str, None] = Body(default="AAJkPgXXX_XXX")):
     cache.set(pt_pin, pt_key)
     background_tasks.add_task(signBeanAct, **{"pt_pin": pt_pin, "pt_key": pt_key})
+    # scheduler.add_job(id="", name="", func=signBeanAct, kwargs={"pt_pin": pt_pin, "pt_key": pt_key}, trigger='cron', days=1, hour=6, minute=1, replace_existing=True)
     return {"code": 200, "msg": f'{pt_pin} 已更新'}
 
 
@@ -63,6 +98,7 @@ async def api(request: Request, path: str, background_tasks: BackgroundTasks,
     path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
+        # scheduler.add_job(id="", name="", func=path_dict[path], kwargs={"token": token}, trigger='cron', days=1, hour=6, minute=1, replace_existing=True)
         result.update({"code": 200, "msg": f'{path} {token} 已更新'})
     return result
 
