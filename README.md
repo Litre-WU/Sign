@@ -2,7 +2,8 @@
 签到啦
 
 运行项目
-`uvicorn --host 0.0.0.0 --port 80
+
+`uvicorn --host 0.0.0.0 --port 80`
 
 后续增加其它平台
 
