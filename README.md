@@ -11,6 +11,6 @@
 
 通过接口添加账户token等
 
-添加后可用crontab定时任务执行该脚本(后续改为apschedule调度运行)
+apschedule调度运行,也可使用crontab运行
 
 后续增加其它平台
