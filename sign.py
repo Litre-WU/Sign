@@ -76,6 +76,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     print("程序结束")
+    scheduler.shutdown(wait=False)
 
 
 # 京豆签到
