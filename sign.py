@@ -64,12 +64,12 @@ async def startup_event():
         if k.startswith("jd_"):
             if not cache[k]:
                 cache.delete("test_pageId")
-    # try:
-    #     print(scheduler.get_jobs())
-    #     # scheduler.remove_all_jobs()
-    #     scheduler.start()
-    # except Exception as e:
-    #     print(f'定时任务启动异常{e}')
+    try:
+        scheduler.start()
+        print(scheduler.get_jobs())
+        # scheduler.remove_all_jobs()
+    except Exception as e:
+        print(f'定时任务启动异常{e}')
 
 
 # 程序停止
@@ -415,6 +415,6 @@ async def crontab_task(**kwargs):
 
 
 if __name__ == '__main__':
-    # import uvicorn
-    # uvicorn.run(app, host="0.0.0.0", port=8082)
-    asyncio.run(crontab_task())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8082)
+    # asyncio.run(crontab_task())
