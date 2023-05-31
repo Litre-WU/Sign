@@ -4,7 +4,8 @@
 (目前支持京东京豆、南航、川航、携程)
 
 运行项目
-`pip install *.txt`
+
+`pip install fastapi httpx loguru diskcache -i https://pypi.doubanio.com/simple/`
 
 `uvicorn sign:app --host 0.0.0.0 --port 80`
 
