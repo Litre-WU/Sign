@@ -7,7 +7,7 @@
 
 `pip install fastapi httpx loguru diskcache -i https://pypi.doubanio.com/simple/`
 
-`uvicorn sign:app --host 0.0.0.0 --port 80`
+`uvicorn sign:app --host 0.0.0.0 --port 8081`
 
 打开 http://127.0.0.1:8081/docs
 
