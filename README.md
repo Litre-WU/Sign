@@ -4,8 +4,9 @@
 (目前支持京东京豆、南航、川航、携程)
 
 运行项目
+`pip install *.txt`
 
-`uvicorn --host 0.0.0.0 --port 80`
+`uvicorn sign:app --host 0.0.0.0 --port 80`
 
 打开 http://127.0.0.1:8081/docs
 
