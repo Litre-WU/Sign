@@ -5,7 +5,7 @@
 
 运行项目
 
-`pip install uvicorn fastapi httpx loguru diskcache apscheduler redis -i https://pypi.doubanio.com/simple/`
+`pip install uvicorn fastapi httpx loguru diskcache apscheduler -i https://pypi.doubanio.com/simple/`
 
 `uvicorn sign:app --host 0.0.0.0 --port 8081`
 
