@@ -16,32 +16,32 @@ from base64 import b64encode
 from pathlib import Path
 from uuid import uuid4
 
-# 使用apscheduler 调用定时任务
-from datetime import datetime, timedelta
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
-from apscheduler.jobstores.redis import RedisJobStore
+# # 使用apscheduler 调用定时任务
+# from datetime import datetime, timedelta
+# from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.schedulers.asyncio import AsyncIOScheduler
+# from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
+# from apscheduler.jobstores.redis import RedisJobStore
 
-scheduler = AsyncIOScheduler(
-    jobstores={
-        "default": RedisJobStore(**{
-            "host": '127.0.0.1',
-            "port": 6379,
-            "db": 10,
-            "max_connections": 10
-        })
-    },
-    executorsexecutors={
-        'default': ThreadPoolExecutor(20),
-        'processpool': ProcessPoolExecutor(5),
+# scheduler = AsyncIOScheduler(
+#     jobstores={
+#         "default": RedisJobStore(**{
+#             "host": '127.0.0.1',
+#             "port": 6379,
+#             "db": 10,
+#             "max_connections": 10
+#         })
+#     },
+#     executorsexecutors={
+#         'default': ThreadPoolExecutor(20),
+#         'processpool': ProcessPoolExecutor(5),
 
-    },
-    job_defaultsjob_defaults={
-        'coalesce': False,
-        'max_instances': 3
-    },
-    timezone="Asia/Shanghai")
+#     },
+#     job_defaultsjob_defaults={
+#         'coalesce': False,
+#         'max_instances': 3
+#     },
+#     timezone="Asia/Shanghai")
 
 cache = Cache(str(Path(__file__).parent / "tmp"))
 
@@ -65,8 +65,8 @@ async def startup_event():
             if not cache[k]:
                 cache.delete("test_pageId")
     try:
-        scheduler.start()
-        print(scheduler.get_jobs())
+        # scheduler.start()
+        # print(scheduler.get_jobs())
         # scheduler.remove_all_jobs()
     except Exception as e:
         print(f'定时任务启动异常{e}')
@@ -76,7 +76,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     print("程序结束")
-    scheduler.shutdown(wait=False)
+    # scheduler.shutdown(wait=False)
 
 
 # 京豆签到
@@ -87,7 +87,7 @@ async def api(request: Request, background_tasks: BackgroundTasks,
     cache.set(pt_pin, pt_key)
     background_tasks.add_task(signBeanAct, **{"pt_pin": pt_pin, "pt_key": pt_key})
     task_id = str(uuid4())
-    scheduler.add_job(id=pt_pin, name=f'{pt_pin}', func=signBeanAct, kwargs={"pt_pin": pt_pin, "pt_key": pt_key}, trigger='cron', hour=6, minute=1, replace_existing=True)
+    # scheduler.add_job(id=pt_pin, name=f'{pt_pin}', func=signBeanAct, kwargs={"pt_pin": pt_pin, "pt_key": pt_key}, trigger='cron', hour=6, minute=1, replace_existing=True)
     return {"code": 200, "msg": f'{pt_pin} 已更新', "task_id": f'{task_id}'}
 
 
@@ -100,7 +100,7 @@ async def api(request: Request, path: str, background_tasks: BackgroundTasks,
     path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
-        scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=6, minute=1, replace_existing=True)
+        # scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=6, minute=1, replace_existing=True)
         result.update({"code": 200, "msg": f'{path} {token} 已更新'})
     return result
 
