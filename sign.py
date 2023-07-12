@@ -119,7 +119,7 @@ async def req(**kwargs):
                                trust_env=False,
                                follow_redirects=True, timeout=20) as client:
             rs = await client.request(method=kwargs.get("method", "GET"), url=url, params=kwargs.get("params", {}),
-                                      data=kwargs.get("data", {}), files=kwargs.get("files", {}),
+                                      data=kwargs.get("data", {}), json=kwargs.get("json", {}), files=kwargs.get("files", {}),
                                       headers=headers)
             return rs
     except Exception as e:
