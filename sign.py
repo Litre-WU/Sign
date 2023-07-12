@@ -93,11 +93,11 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入dragon_boat_2023值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX")):
     result = {"code": 400, "msg": "请检查路由路径!"}
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         # scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=6, minute=1, replace_existing=True)
@@ -385,6 +385,156 @@ async def ctripSign(**kwargs):
     return result
 
 
+# 微信龙舟游戏
+async def dragon_boat_2023(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入session_token',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    session_token = token
+    activity_id = 1000005
+    # 目标分数及提现额度
+    total_score = 10000
+    # 获取game_id
+    meta = {
+        "method": "POST",
+        "url": "https://payapp.weixin.qq.com/coupon-center-activity/game/create",
+        "params": {
+            "session_token": session_token},
+        "headers": {
+            "Content-Type": "application/json",
+            "X-Requested-With": "com.tencent.mm",
+        },
+        "json": {"activity_id": activity_id, "game_pk_id": ""}
+    }
+    res = await req(**meta)
+    if res:
+        res = res.json()
+        if res.get("data"):
+            game_id = res["data"]["game_id"]
+            game_score = 0
+            score_items = []
+            for tracks in res["data"]["play_script"]["dragon_boat_2023_play_script"]["tracks"]:
+                for prop in tracks["props"]:
+                    if prop.get("score"):
+                        score_items.append({"prop_id": prop["prop_id"], "award_score": prop["score"],
+                                            "fetch_timestamp_ms": int(round(time() * 1000))})
+                        game_score += prop["score"]
+            logger.info(f'游戏ID: {game_id} 游戏总分: {game_score}')
+            if game_score < total_score:
+                sleep(uniform(0, 0.2))
+                return await dragon_boat_2023()
+        else:
+            logger.error(f'账号状态: {res}')
+            return res
+        cache.set(f'dragon_boat_2023_{token}', token)
+        # 开始游戏
+        meta = {
+            "method": "POST",
+            "url": "https://payapp.weixin.qq.com/coupon-center-report/statistic/batchreport",
+            "params": {
+                "session_token": session_token},
+            "headers": {
+                "Content-Type": "application/json",
+                "X-Requested-With": "com.tencent.mm",
+            },
+            "json": {
+                "source_scene": "scene",
+                "device": "DEVICE_ANDROID",
+                "device_platform": "DEVICE_ANDROID",
+                "device_system": "DEVICE_ANDROID",
+                "device_brand": "DEVICE_ANDROID",
+                "device_model": "DEVICE_ANDROID",
+                "wechat_version": "1.0.0",
+                "wxa_sdk_version": "1.0.0",
+                "wxa_custom_version": "1.1.6",
+                "event_list": [
+                    {
+                        "event_code": "ActivityGameBegin",
+                        "event_target": str(activity_id),
+                        "intval1": 2,
+                        "strval1": game_id,
+                    }
+                ],
+            }
+        }
+        res = await req(**meta)
+        if res:
+            logger.info(f'开始: {res.text}')
+        # 游戏间隔时间
+        sleep(25)
+        # 提交分数
+        meta = {
+            "method": "POST",
+            "url": "https://payapp.weixin.qq.com/coupon-center-activity/game/report",
+            "params": {
+                "session_token": session_token},
+            "headers": {
+                "Content-Type": "application/json",
+                "X-Requested-With": "com.tencent.mm",
+            },
+            "json": {
+                "activity_id": activity_id,
+                "game_id": game_id,
+                "game_report_score_info": {
+                    "score_items": score_items,
+                    "game_score": game_score,
+                    "total_score": game_score,
+                },
+            }
+        }
+        res = await req(**meta)
+        if res:
+            logger.info(f'提交: {res.text}')
+            res = res.json()
+            if res.get("msg"):
+                return res
+        # 获取分数
+        meta = {
+            "url": "https://payapp.weixin.qq.com/coupon-center-activity/game/get",
+            "params": {
+                "session_token": session_token,
+                "activity_id": "1000000",
+                "game_id": game_id,
+                "sid": "a5299654f1f5e423c1fc9757f9bf071d",
+                "coutom_version": "6.30.6"
+            },
+            "headers": {
+                "Content-Type": "application/json",
+                "X-Requested-With": "com.tencent.mm",
+            }
+        }
+        res = await req(**meta)
+        if res:
+            logger.info(f'分数: {res.text}')
+        # 反馈
+        meta = {
+            "method": "POST",
+            "url": "https://payapp.weixin.qq.com/coupon-center-activity/award/obtain",
+            "params": {
+                "session_token": session_token},
+            "json": {
+                "activity_id": activity_id,
+                "game_id": game_id,
+                "obtain_ornament": True,
+                "request_id": f'osd2L5ZiTu4UDWiNrB8bxnlVB-bQ_lj440mdj_{"".join(sample("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 4))}',
+                "sid": "3bec088206a229c0cd925c464809cd24",
+                "coutom_version": "6.30.8",
+            },
+            "headers": {
+                "Content-Type": "application/json",
+                "X-Requested-With": "com.tencent.mm",
+            }
+        }
+        res = await req(**meta)
+        if res:
+            logger.info(f'反馈: {res.text}')
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -408,7 +558,8 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(sichuanairSign(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("sichuanair_")]
     # 携程任务
     tasks += [asyncio.create_task(ctripSign(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("ctrip_")]
-
+    # 微信龙舟任务
+    tasks += [asyncio.create_task(dragon_boat_2023(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("dragon_boat_2023_")]
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
     return result_list
