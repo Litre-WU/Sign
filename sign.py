@@ -1,6 +1,6 @@
 import asyncio
 from httpx import AsyncClient
-from time import time, asctime
+from time import time, sleep, asctime
 from datetime import datetime
 from calendar import monthrange
 from loguru import logger
@@ -15,6 +15,7 @@ import hashlib
 from base64 import b64encode
 from pathlib import Path
 from uuid import uuid4
+from random import uniform, sample
 
 # # 使用apscheduler 调用定时任务
 # from datetime import datetime, timedelta
@@ -93,7 +94,7 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入dragon_boat_2023值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX")):
     result = {"code": 400, "msg": "请检查路由路径!"}
@@ -392,10 +393,9 @@ async def dragon_boat_2023(**kwargs):
         "msg": f'请输入session_token',
         "time": int(time())
     }
-    token = kwargs.get("token", "")
-    if not token:
+    session_token = kwargs.get("token", "")
+    if not session_token:
         return result
-    session_token = token
     activity_id = 1000005
     # 目标分数及提现额度
     total_score = 10000
@@ -427,21 +427,15 @@ async def dragon_boat_2023(**kwargs):
             logger.info(f'游戏ID: {game_id} 游戏总分: {game_score}')
             if game_score < total_score:
                 sleep(uniform(0, 0.2))
-                return await dragon_boat_2023()
+                return await dragon_boat_2023(**kwargs)
         else:
             logger.error(f'账号状态: {res}')
+            cache.delete(f'dragon_boat_2023_{session_token}')
             return res
-        cache.set(f'dragon_boat_2023_{token}', token)
+        cache.set(f'dragon_boat_2023_{session_token}', session_token)
         # 开始游戏
-        meta = {
-            "method": "POST",
+        meta.update({
             "url": "https://payapp.weixin.qq.com/coupon-center-report/statistic/batchreport",
-            "params": {
-                "session_token": session_token},
-            "headers": {
-                "Content-Type": "application/json",
-                "X-Requested-With": "com.tencent.mm",
-            },
             "json": {
                 "source_scene": "scene",
                 "device": "DEVICE_ANDROID",
@@ -461,22 +455,15 @@ async def dragon_boat_2023(**kwargs):
                     }
                 ],
             }
-        }
+        })
         res = await req(**meta)
         if res:
             logger.info(f'开始: {res.text}')
         # 游戏间隔时间
         sleep(25)
         # 提交分数
-        meta = {
-            "method": "POST",
+        meta.update({
             "url": "https://payapp.weixin.qq.com/coupon-center-activity/game/report",
-            "params": {
-                "session_token": session_token},
-            "headers": {
-                "Content-Type": "application/json",
-                "X-Requested-With": "com.tencent.mm",
-            },
             "json": {
                 "activity_id": activity_id,
                 "game_id": game_id,
@@ -486,7 +473,7 @@ async def dragon_boat_2023(**kwargs):
                     "total_score": game_score,
                 },
             }
-        }
+        })
         res = await req(**meta)
         if res:
             logger.info(f'提交: {res.text}')
@@ -494,25 +481,25 @@ async def dragon_boat_2023(**kwargs):
             if res.get("msg"):
                 return res
         # 获取分数
-        meta = {
-            "url": "https://payapp.weixin.qq.com/coupon-center-activity/game/get",
-            "params": {
-                "session_token": session_token,
-                "activity_id": "1000000",
-                "game_id": game_id,
-                "sid": "a5299654f1f5e423c1fc9757f9bf071d",
-                "coutom_version": "6.30.6"
-            },
-            "headers": {
-                "Content-Type": "application/json",
-                "X-Requested-With": "com.tencent.mm",
+        meta.update(
+            {
+                "method": "GET",
+                "url": "https://payapp.weixin.qq.com/coupon-center-activity/game/get",
+                "params": {
+                    "session_token": session_token,
+                    "activity_id": "1000000",
+                    "game_id": game_id,
+                    "sid": "a5299654f1f5e423c1fc9757f9bf071d",
+                    "coutom_version": "6.30.6"
+                },
+                "json": {}
             }
-        }
+        )
         res = await req(**meta)
         if res:
             logger.info(f'分数: {res.text}')
         # 反馈
-        meta = {
+        meta.update({
             "method": "POST",
             "url": "https://payapp.weixin.qq.com/coupon-center-activity/award/obtain",
             "params": {
@@ -524,12 +511,8 @@ async def dragon_boat_2023(**kwargs):
                 "request_id": f'osd2L5ZiTu4UDWiNrB8bxnlVB-bQ_lj440mdj_{"".join(sample("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 4))}',
                 "sid": "3bec088206a229c0cd925c464809cd24",
                 "coutom_version": "6.30.8",
-            },
-            "headers": {
-                "Content-Type": "application/json",
-                "X-Requested-With": "com.tencent.mm",
             }
-        }
+        })
         res = await req(**meta)
         if res:
             logger.info(f'反馈: {res.text}')
