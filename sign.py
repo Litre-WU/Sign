@@ -545,7 +545,7 @@ async def meituan(**kwargs):
     }
     res = await req(**meta)
     if res:
-        cache.set(f'meituan_{session_token}', token)
+        cache.set(f'meituan_{token}', token)
         logger.info(res.text)
 
 
