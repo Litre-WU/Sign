@@ -15,4 +15,6 @@
 
 apschedule调度运行,也可使用crontab运行,apschedule调度运行,也可使用crontab运行，使用apscheduler需安装redis, 使用crontab则不需要
 
+(使用apscheduler 将注释代码解除就可以)
+
 后续增加其它平台
