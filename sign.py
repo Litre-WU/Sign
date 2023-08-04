@@ -94,11 +94,11 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX")):
     result = {"code": 400, "msg": "请检查路由路径!"}
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         # scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=6, minute=1, replace_existing=True)
@@ -549,6 +549,52 @@ async def meituan(**kwargs):
         logger.info(res.text)
 
 
+# 统一快乐星球
+async def weimob(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入X-WX-Token',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    meta = {
+        "method": "POST",
+        "url": "https://xapi.weimob.com/api3/onecrm/mactivity/sign/misc/sign/activity/core/c/sign",
+        "json": {"appid": "wx532ecb3bdaaf92f9",
+                 "basicInfo": {"vid": 6013753979957, "vidType": 2, "bosId": 4020112618957, "productId": 146,
+                               "productInstanceId": 3168798957, "productVersionId": "12017",
+                               "merchantId": 2000020692957, "tcode": "weimob", "cid": 176205957},
+                 "extendInfo": {"wxTemplateId": 7083,
+                                "childTemplateIds": [{"customId": 90004, "version": "crm@0.0.159"},
+                                                     {"customId": 90002, "version": "ec@31.1"},
+                                                     {"customId": 90006, "version": "hudong@0.0.175"},
+                                                     {"customId": 90008, "version": "cms@0.0.328"}], "analysis": [],
+                                "quickdeliver": {"enable": False}, "bosTemplateId": 1000001061,
+                                "youshu": {"enable": False}, "source": 1, "channelsource": 5,
+                                "refer": "onecrm-signgift", "mpScene": 1089},
+                 "queryParameter": {"tracePromotionId": "100006218", "tracepromotionid": "100006218"},
+                 "i18n": {"language": "zh", "timezone": "8"}, "pid": "4020112618957", "storeId": "0",
+                 "customInfo": {"source": 0, "wid": 10613173124}, "tracePromotionId": "100006218",
+                 "tracepromotionid": "100006218"}
+        ,
+        "headers": {
+            "X-WX-Token": token,
+        },
+    }
+    res = await req(**meta)
+    logger.info(res.text)
+    if res:
+        res = res.json()
+        if res["errcode"] == 1041:
+            cache.delete(f'weimob_{token}')
+        else:
+            cache.set(f'weimob_{token}', token)
+        result.update({"msg": res.get("errmsg", "")})
+        await dingAlert(**result)
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -576,6 +622,8 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(dragon_boat_2023(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("dragon_boat_2023_")]
     # 美团优惠券
     tasks += [asyncio.create_task(meituan(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("meituan_")]
+    # 统一星球
+    tasks += [asyncio.create_task(weimob(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("weimob_")]
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
     return result_list
