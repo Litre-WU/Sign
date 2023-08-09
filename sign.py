@@ -94,11 +94,11 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX")):
     result = {"code": 400, "msg": "请检查路由路径!"}
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         # scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=6, minute=1, replace_existing=True)
@@ -593,6 +593,34 @@ async def weimob(**kwargs):
             cache.set(f'weimob_{token}', token)
         result.update({"msg": res.get("errmsg", "")})
         await dingAlert(**result)
+
+
+# 中国移动
+async def m10086(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入SESSION',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    meta = {
+        "url": "https://wx.10086.cn/qwhdhub/api/mark/do/mark",
+        "headers": {
+            "Cookie": f"SESSION={token}"
+        }
+    }
+    res = await req(**meta)
+    logger.info(res.text)
+    try:
+        if res:
+            res = res.json()
+            cache.set(f'10086_{token}', token)
+            result.update({"msg": f'10086_{token} {res.get("msg", "")}'})
+            await dingAlert(**result)
+    except Exception as e:
+        cache.delete(f'10086_{token}')
 
 
 # 定时任务
