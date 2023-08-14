@@ -128,7 +128,7 @@ async def req(**kwargs):
         retry += 1
         if retry > 2:
             return None
-        return req(**kwargs | {"retry": retry})
+        return await req(**kwargs | {"retry": retry})
 
 
 # 钉钉通知
@@ -605,20 +605,88 @@ async def m10086(**kwargs):
     token = kwargs.get("token", "")
     if not token:
         return result
+    # 公众号签到
     meta = {
         "url": "https://wx.10086.cn/qwhdhub/api/mark/do/mark",
         "headers": {
-            "Cookie": f"SESSION={token}"
+            # "Accept-Charset": "utf-8",
+            # "Content-Type": "application/json;charset=UTF-8",
+            "x-requested-with": "XMLHttpRequest",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/20G75 Ariver/1.0.15 leadeon/9.0.0/CMCCIT/tinyApplet WK RVKType(0) NebulaX/1.0.0",
+            "login-check": "1",
+            "Cookie": f"SESSION={token}",
         }
     }
     res = await req(**meta)
-    logger.info(res.text)
     try:
         if res:
+            logger.info(f'公众号签到 {res.text}')
             res = res.json()
             cache.set(f'10086_{token}', token)
             result.update({"msg": f'10086_{token} {res.get("msg", "")}'})
-            await dingAlert(**result)
+
+            # app签到
+            meta.update({
+                "method": "POST",
+                "url": "https://wx.10086.cn/qwhdhub/api/mark/mark31/domark",
+                "json": {"date": datetime.now().strftime("%Y%m%d")}
+            })
+            res = await req(**meta)
+            logger.info(f'app 签到{res.text}')
+
+            # 任务列表
+            meta.update({
+                "url": "https://wx.10086.cn/qwhdhub/api/mark/task/taskList",
+            })
+            res = await req(**meta)
+            print(res.text)
+            for t in res.json()["data"]["tasks"]:
+                taskName, taskId, taskType, jumpUrl = t["taskName"], t["taskId"], t["taskType"], t["jumpUrl"]
+                # 任务详情
+                meta.update({
+                    "url": "https://wx.10086.cn/qwhdhub/api/mark/task/taskInfo",
+                    "json": {"taskId": str(taskId)},
+                })
+                res = await req(**meta)
+                logger.info(f'taskInfo {taskName} {taskType} {taskId} {res.text}')
+
+                taskType = res.json()["data"]["taskType"]
+
+
+                # # 公众号任务 获取回调地址 （需要sid）
+                # meta.update({
+                #     "url": "https://wx.10086.cn/website/nrapigate/nrmix/activityGroup/getSignTask",
+                #     "json": {"ystitle": "", "taskId": str(taskId)},
+                # })
+                # res = await req(**meta)
+                # logger.info(f'getSignTask {taskName} {taskType} {taskId} {res.text}')
+                #
+                # # 公众号任务完成
+                # meta.update({
+                #     "url": "https://wx.10086.cn/website/nrapigate/nrmix/activityGroup/finishSignTask",
+                #     "json": {"ystitle": "", "taskId": str(taskId)},
+                # })
+                # res = await req(**meta)
+                # logger.info(f'finishSignTask {taskName} {taskType} {taskId} {res.text}')
+
+                # app任务完成
+                meta.update({
+                    "method": "POST",
+                    "url": "https://wx.10086.cn/qwhdhub/api/mark/task/finishTask",
+                    "json": {"taskId": str(taskId), "taskType": str(taskType)},
+                })
+                res = await req(**meta)
+                logger.info(f'finishTask {taskName} {taskType} {taskId} {res.text}')
+
+                # 领取奖励
+                meta.update({
+                    "url": "https://wx.10086.cn/qwhdhub/api/mark/task/getTaskAward",
+                    "json": {"taskId": str(t["taskId"])}
+                })
+                res = await req(**meta)
+                logger.info(f'getTaskAward {taskName} {taskType} {taskId} {res.text}')
+
+            # await dingAlert(**result)
     except Exception as e:
         cache.delete(f'10086_{token}')
 
