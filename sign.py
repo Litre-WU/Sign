@@ -26,6 +26,10 @@ from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from dateutil.parser import parse
 
+db_path = str(Path(__file__).parent / "tmp")
+
+cache = Cache(db_path)
+
 
 scheduler = AsyncIOScheduler(
     jobstores={
@@ -35,7 +39,7 @@ scheduler = AsyncIOScheduler(
         #     "db": 10,
         #     "max_connections": 10
         # })
-        "default": SQLAlchemyJobStore(url='sqlite:///jobs.db')
+        "default": SQLAlchemyJobStore(url=f'sqlite:///{db_path}/cache.db')
     },
     executorsexecutors={
         'default': ThreadPoolExecutor(20),
@@ -47,8 +51,6 @@ scheduler = AsyncIOScheduler(
         'max_instances': 3
     },
     timezone="Asia/Shanghai")
-
-cache = Cache(str(Path(__file__).parent / "tmp"))
 
 app = FastAPI(title="定时脚本")
 
