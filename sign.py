@@ -24,6 +24,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 # from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from dateutil.parser import parse
 
 
 scheduler = AsyncIOScheduler(
@@ -87,11 +88,12 @@ async def shutdown_event():
 @app.post("/signBeanAct", tags=["京东签到"])
 async def api(request: Request, background_tasks: BackgroundTasks,
               pt_pin: Union[str, None] = Body(default="jd_XXX"),
-              pt_key: Union[str, None] = Body(default="AAJkPgXXX_XXX")):
+              pt_key: Union[str, None] = Body(default="AAJkPgXXX_XXX"), time: Union[str, None] = Body(default="09:00:00")):
     cache.set(pt_pin, pt_key)
+    data_time = parse(time)
     background_tasks.add_task(signBeanAct, **{"pt_pin": pt_pin, "pt_key": pt_key})
     task_id = str(uuid4())
-    scheduler.add_job(id=pt_pin, name=f'{pt_pin}', func=signBeanAct, kwargs={"pt_pin": pt_pin, "pt_key": pt_key}, trigger='cron', hour=9, replace_existing=True)
+    scheduler.add_job(id=pt_pin, name=f'{pt_pin}', func=signBeanAct, kwargs={"pt_pin": pt_pin, "pt_key": pt_key}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
     return {"code": 200, "msg": f'{pt_pin} 已更新', "task_id": f'{task_id}'}
 
 
@@ -99,12 +101,13 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 @app.post("/{path}", tags=["类token签到"],
           description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
-              token: Union[str, None] = Body(default="XXX")):
+              token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
+    data_time = parse(time)
     path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
-        scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=9, replace_existing=True)
+        scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
         result.update({"code": 200, "msg": f'{path} {token} 已更新'})
     return result
 
