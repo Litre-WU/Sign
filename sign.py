@@ -89,7 +89,7 @@ async def api(request: Request, background_tasks: BackgroundTasks,
     cache.set(pt_pin, pt_key)
     background_tasks.add_task(signBeanAct, **{"pt_pin": pt_pin, "pt_key": pt_key})
     task_id = str(uuid4())
-    scheduler.add_job(id=pt_pin, name=f'{pt_pin}', func=signBeanAct, kwargs={"pt_pin": pt_pin, "pt_key": pt_key}, trigger='cron', hour=6, minute=1, replace_existing=True)
+    scheduler.add_job(id=pt_pin, name=f'{pt_pin}', func=signBeanAct, kwargs={"pt_pin": pt_pin, "pt_key": pt_key}, trigger='cron', hour=9, replace_existing=True)
     return {"code": 200, "msg": f'{pt_pin} 已更新', "task_id": f'{task_id}'}
 
 
@@ -102,7 +102,7 @@ async def api(request: Request, path: str, background_tasks: BackgroundTasks,
     path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
-        scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=6, minute=1, replace_existing=True)
+        scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=9, replace_existing=True)
         result.update({"code": 200, "msg": f'{path} {token} 已更新'})
     return result
 
