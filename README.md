@@ -13,6 +13,6 @@
 
 通过接口添加账户token等
 
-apschedule调度运行,也可使用crontab运行,apschedule调度运行,也可使用crontab运行
+apschedule调度运行,也可使用crontab运行,apschedule调度运行(默认早上九点签到),也可使用crontab运行
 
 后续增加其它平台
