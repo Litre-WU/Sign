@@ -5,7 +5,7 @@
 
 运行项目
 
-`pip install uvicorn fastapi httpx loguru diskcache apscheduler redis -i https://pypi.doubanio.com/simple/`
+`pip install uvicorn fastapi httpx loguru diskcache apscheduler SQLAlchemy -i https://pypi.doubanio.com/simple/`
 
 `uvicorn sign:app --host 0.0.0.0 --port 8081`
 
@@ -13,8 +13,6 @@
 
 通过接口添加账户token等
 
-apschedule调度运行,也可使用crontab运行,apschedule调度运行,也可使用crontab运行，使用apscheduler需安装redis, 使用crontab则不需要
-
-(使用apscheduler将注释代码解除就可以)
+apschedule调度运行,也可使用crontab运行,apschedule调度运行,也可使用crontab运行
 
 后续增加其它平台
