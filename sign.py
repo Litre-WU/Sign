@@ -34,7 +34,7 @@ db_path = str(Path(__file__).parent / "tmp")
 cache = Cache(db_path)
 
 
-# 脚本输出参数(crontab执行脚本时使用)
+# 脚本输入参数(crontab执行脚本时使用)
 parser = argparse.ArgumentParser(prog="Sign(crontab执行脚本时使用)",
                                  description="crontab定时运行脚本和sqlite数据库未添加情况下，可以通过追加参数添加token值, 多个账户使用';'隔开",
                                  epilog="京东pt_pin和pt_key需同时传入！！！")
@@ -657,7 +657,7 @@ async def m10086(**kwargs):
             "x-requested-with": "XMLHttpRequest",
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/20G75 Ariver/1.0.15 leadeon/9.0.0/CMCCIT/tinyApplet WK RVKType(0) NebulaX/1.0.0",
             "login-check": "1",
-            "Cookie": f"SESSION={token}",
+            "Cookie": f"SESSION_TOKEN={token}",
         }
     }
     res = await req(**meta)
