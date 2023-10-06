@@ -15,4 +15,6 @@
 
 apschedule调度运行(默认早上九点签到),也可使用crontab运行
 
+crontab运行脚本后面添加参数即可(例如 0 9 * * * ~/python3 ~/sign.py --pt_pin jd_XXX --pt_key AAJXXX)
+
 后续增加其它平台...
