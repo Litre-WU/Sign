@@ -737,6 +737,6 @@ async def crontab_task(**kwargs):
 
 
 if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8082)
-    # asyncio.run(crontab_task())
+    # import uvicorn
+    # uvicorn.run(app, host="0.0.0.0", port=8082)
+    asyncio.run(crontab_task())
