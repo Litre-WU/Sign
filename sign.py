@@ -25,6 +25,8 @@ from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 # from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from dateutil.parser import parse
+import socket
+
 
 db_path = str(Path(__file__).parent / "tmp")
 
@@ -67,6 +69,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     print("程序开始")
+    print(f'浏览器访问 http://{socket.gethostbyname(socket.gethostname())}:8082/docs')
     for k in cache.iterkeys():
         if k.startswith("jd_"):
             if not cache[k]:
