@@ -26,7 +26,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from dateutil.parser import parse
 import socket
-import argparse
+import sys
 
 
 db_path = str(Path(__file__).parent / "tmp")
@@ -34,38 +34,41 @@ db_path = str(Path(__file__).parent / "tmp")
 cache = Cache(db_path)
 
 
-# 脚本输入参数(crontab执行脚本时使用)
-try:
-    parser = argparse.ArgumentParser(prog="Sign(crontab执行脚本时使用)",
-                                     description="crontab定时运行脚本和sqlite数据库未添加情况下，可以通过追加参数添加token值, 多个账户使用';'隔开",
-                                     epilog="京东pt_pin和pt_key需同时传入！！！")
+tip = """
+脚本输入参数(crontab执行脚本时使用)
+ 
+ --pt_pin       京东Cookie中获取pt_pin值
+ --pt_key       京东Cookie中获取pt_key值
+ --csai         南航账户的sign_user_token值
+ --sichuanair   川航账户的access-token值
+ --ctrip        携程账户的cticket值
+ --meituan      美团账户的token值
+ --weimob       统一快乐星球账户的X-WX-Token值
+ --10086        中国移动账户的SESSION值
+ 
+ 京东pt_pin和pt_key需同时传入！！！
+"""
 
-    parser.add_argument('--pt_pin', help='京东Cookie中获取pt_pin值')
-    parser.add_argument('--pt_key', help='京东Cookie中获取pt_key值')
-    parser.add_argument('--csai', help='南航账户的sign_user_token值')
-    parser.add_argument('--sichuanair', help='川航账户的access-token值')
-    parser.add_argument('--ctrip', help='携程账户的cticket值')
-    parser.add_argument('--meituan', help='美团账户的token值')
-    parser.add_argument('--weimob', help='统一快乐星球账户的X-WX-Token值')
-    parser.add_argument('--10086', help='中国移动账户的SESSION值')
-    parser.print_help()
+print(tip)
 
-    args = parser.parse_args().__dict__
-
-    for k, v in args.items():
+args = sys.argv
+for i, arg in enumerate(args):
+    if arg.startswith("-"):
+        k = arg.strip("-")
+        v = args[i + 1]
+        if v.startswith("-"):
+            continue
         if v:
             if k.startswith("pt_"):
                 if k == "pt_pin":
-                    for i, v_ in enumerate(v.split(";")):
+                    for i_, v_ in enumerate(v.split(";")):
                         try:
-                            cache.set(v_, args["pt_key"].split(";")[i])
+                            cache.set(v_, args[i + 3].split(";")[i_])
                         except:
                             pass
             else:
                 for v_ in v.split(";"):
                     cache.set(f'{k}_{v_}', v_)
-except:
-    pass
                 
 
 scheduler = AsyncIOScheduler(
@@ -181,30 +184,31 @@ async def req(**kwargs):
 async def dingAlert(**kwargs):
     access_token = kwargs.get("access_token", "")
     secret = kwargs.get("secret", "")
-    timestamp = str(round(time() * 1000))
-    sign = b64encode(
-        hmac.new(secret.encode(), f'{timestamp}\n{secret}'.encode(), digestmod=hashlib.sha256).digest()).decode()
-    meta = {
-        "method": "POST",
-        "url": "https://oapi.dingtalk.com/robot/send",
-        "params": {
-            "access_token": access_token,
-            "timestamp": timestamp,
-            "sign": sign,
-        },
-        "data": dumps({
-            'msgtype': 'text',
-            'text': {'content': f'{kwargs.get("msg", "测试")} {asctime()}'}
-        }),
-        "headers": {"Content-Type": "application/json"}
-    }
-    res = await req(**meta)
-    # print(res.text)
-    if res and not res.json().get('errcode'):
-        return True
-    else:
-        logger.error(f'{res.text}')
-        return False
+    if access_token and secret:
+        timestamp = str(round(time() * 1000))
+        sign = b64encode(
+            hmac.new(secret.encode(), f'{timestamp}\n{secret}'.encode(), digestmod=hashlib.sha256).digest()).decode()
+        meta = {
+            "method": "POST",
+            "url": "https://oapi.dingtalk.com/robot/send",
+            "params": {
+                "access_token": access_token,
+                "timestamp": timestamp,
+                "sign": sign,
+            },
+            "data": dumps({
+                'msgtype': 'text',
+                'text': {'content': f'{kwargs.get("msg", "测试")} {asctime()}'}
+            }),
+            "headers": {"Content-Type": "application/json"}
+        }
+        res = await req(**meta)
+        # print(res.text)
+        if res and not res.json().get('errcode'):
+            return True
+        else:
+            logger.error(f'{res.text}')
+            return False
 
 
 # 京豆签到
