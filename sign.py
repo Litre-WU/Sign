@@ -101,7 +101,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     print("程序开始")
-    print(f'浏览器访问 http://{socket.gethostbyname(socket.gethostname())}:8082/docs')
+    print(f'设备IP: {socket.gethostbyname(socket.gethostname())} 当127.0.0.1无法访问时，可以使用设备ip替换')
     for k in cache.iterkeys():
         if k.startswith("jd_"):
             if not cache[k]:
