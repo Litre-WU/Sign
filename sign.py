@@ -35,34 +35,37 @@ cache = Cache(db_path)
 
 
 # 脚本输入参数(crontab执行脚本时使用)
-parser = argparse.ArgumentParser(prog="Sign(crontab执行脚本时使用)",
-                                 description="crontab定时运行脚本和sqlite数据库未添加情况下，可以通过追加参数添加token值, 多个账户使用';'隔开",
-                                 epilog="京东pt_pin和pt_key需同时传入！！！")
+try:
+    parser = argparse.ArgumentParser(prog="Sign(crontab执行脚本时使用)",
+                                     description="crontab定时运行脚本和sqlite数据库未添加情况下，可以通过追加参数添加token值, 多个账户使用';'隔开",
+                                     epilog="京东pt_pin和pt_key需同时传入！！！")
 
-parser.add_argument('--pt_pin', help='京东Cookie中获取pt_pin值')
-parser.add_argument('--pt_key', help='京东Cookie中获取pt_key值')
-parser.add_argument('--csai', help='南航账户的sign_user_token值')
-parser.add_argument('--sichuanair', help='川航账户的access-token值')
-parser.add_argument('--ctrip', help='携程账户的cticket值')
-parser.add_argument('--meituan', help='美团账户的token值')
-parser.add_argument('--weimob', help='统一快乐星球账户的X-WX-Token值')
-parser.add_argument('--10086', help='中国移动账户的SESSION值')
-parser.print_help()
+    parser.add_argument('--pt_pin', help='京东Cookie中获取pt_pin值')
+    parser.add_argument('--pt_key', help='京东Cookie中获取pt_key值')
+    parser.add_argument('--csai', help='南航账户的sign_user_token值')
+    parser.add_argument('--sichuanair', help='川航账户的access-token值')
+    parser.add_argument('--ctrip', help='携程账户的cticket值')
+    parser.add_argument('--meituan', help='美团账户的token值')
+    parser.add_argument('--weimob', help='统一快乐星球账户的X-WX-Token值')
+    parser.add_argument('--10086', help='中国移动账户的SESSION值')
+    parser.print_help()
 
-args = parser.parse_args().__dict__
+    args = parser.parse_args().__dict__
 
-for k, v in args.items():
-    if v:
-        if k.startswith("pt_"):
-            if k == "pt_pin":
-                for i, v_ in enumerate(v.split(";")):
-                    try:
-                        cache.set(v_, args["pt_key"].split(";")[i])
-                    except:
-                        pass
-        else:
-            for v_ in v.split(";"):
-                cache.set(f'{k}_{v_}', v_)
+    for k, v in args.items():
+        if v:
+            if k.startswith("pt_"):
+                if k == "pt_pin":
+                    for i, v_ in enumerate(v.split(";")):
+                        try:
+                            cache.set(v_, args["pt_key"].split(";")[i])
+                        except:
+                            pass
+            else:
+                for v_ in v.split(";"):
+                    cache.set(f'{k}_{v_}', v_)
+except:
+    pass
                 
 
 scheduler = AsyncIOScheduler(
