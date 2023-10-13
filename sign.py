@@ -39,12 +39,13 @@ tip = """
  
  --pt_pin       京东Cookie中获取pt_pin值
  --pt_key       京东Cookie中获取pt_key值
- --csai         南航账户的sign_user_token值
- --sichuanair   川航账户的access-token值
- --ctrip        携程账户的cticket值
- --meituan      美团账户的token值
- --weimob       统一快乐星球账户的X-WX-Token值
- --10086        中国移动账户的SESSION值
+ --csai         南航账户的Cookie中sign_user_token值
+ --sichuanair   川航账户的Cookie中access-token值
+ --ctrip        携程账户的Cookie中cticket值
+ --meituan      美团账户Cookie中的token值
+ --weimob       统一快乐星球账户Cookie中的X-WX-Token值
+ --10086        中国移动账户Cookie中的SESSION值
+ --10010        中国联通账户Cookie中的ecs_token值
  
  京东pt_pin和pt_key需同时传入！！！
 """
