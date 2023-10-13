@@ -1,11 +1,11 @@
 # Sign
 签到啦
 
-(目前支持京东京豆、南航、川航、携程、微信支付有优惠小程序龙舟游戏刷免费提现券、美团优惠券、统一快乐星球、中国移动)
+(目前支持京东京豆、南航、川航、携程、微信支付有优惠小程序龙舟游戏刷免费提现券、美团优惠券、统一快乐星球、中国移动、中国联通)
 
 运行项目
 
-`pip install uvicorn fastapi httpx loguru diskcache apscheduler SQLAlchemy python-dateutil -i https://pypi.doubanio.com/simple/`
+`pip install uvicorn fastapi httpx loguru diskcache apscheduler SQLAlchemy python-dateutil -i https://pypi.tuna.tsinghua.edu.cn/simple`
 
 `uvicorn sign:app --host 0.0.0.0 --port 8081`
 
