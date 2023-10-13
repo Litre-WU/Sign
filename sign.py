@@ -142,12 +142,12 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -292,43 +292,66 @@ async def csairSign(**kwargs):
             "chanel": "ss",
             "lang": "zh"
         },
-        "data": dumps({"activityType": "sign", "channel": "app"}),
+        "json": {
+            "activityType": "sign",
+            "channel": "app",
+            "entrance": None
+        },
         "headers": {"Content-Type": "application/json"},
-        "cookies": {"sign_user_token": token}
+        "cookies": {
+            "sign_user_token": token,
+            "TOKEN": token,
+            "cs1246643sso": token,
+        }
     }
     res = await req(**meta)
     if res.status_code == 200:
-        # text = res.text
         try:
-            # {"respCode": "0000", "respMsg": "success", "data": "SEND_OK"}
             info = res.json()
+            if info.get("respCode") == "S00011":
+                result.update({"code": 200, "msg": f'南航用户：{token} 检查token是否有效'})
+                cache.delete(f'csai_{token}')
             if info.get("respCode") == "S2001":
-                result.update({"code": 200, "msg": f'南航用户：{token} 今天已签到'})
+                result.update({"code": 200, "msg": f'南航用户：{token} 今天已签到！'})
             else:
-                # cache.delete(f'csai_{token}')
                 result.update({"msg": f'{token} {info.get("respMsg", "")}'})
+            # 奖励列表
+            meta.update({
+                "url": "https://wxapi.csair.com/marketing-tools/award/awardList",
+                "json": {"activityType": "sign", "awardStatus": "waitReceive", "pageNum": 1, "pageSize": 100},
+            })
+            res = await req(**meta)
+            if res.status_code == 200:
+                for d in res.json()["data"]["list"]:
+                    logger.info(d["id"])
+                    meta.update({
+                        "url": "https://wxapi.csair.com/marketing-tools/award/getAward",
+                        "json": {"activityType": "sign", "signUserRewardId": d["id"]},
+                    })
+                    res = await req(**meta)
+                    if res.status_code == 200:
+                        logger.info(res.json()["data"]["result"])
         except Exception as e:
             logger.error(f'南航签到程序异常 {e}')
             result.update({"msg": f"南航签到程序异常 {kwargs}"})
     logger.info(result)
     # 签到日历
-    month_start = datetime(datetime.now().year, datetime.now().month, 1)
+    month_start = datetime(datetime.now().year, datetime.now().month, 1).strftime("%Y%m%d")
     month_end = datetime(datetime.now().year, datetime.now().month,
-                         monthrange(datetime.now().year, datetime.now().month)[1])
+                         monthrange(datetime.now().year, datetime.now().month)[1]).strftime("%Y%m%d")
     meta = {
         "url": "https://wxapi.csair.com/marketing-tools/sign/getSignCalendar",
         "params": {
             "type": "APPTYPE",
             "chanel": "ss",
             "lang": "zh",
-            "startQueryDate": str(month_start).split()[0].replace("-", ""),
-            "endQueryDate": str(month_end).split()[0].replace("-", "")
+            "startQueryDate": month_start,
+            "endQueryDate": month_end
         },
         "cookies": {"sign_user_token": token}
     }
     res = await req(**meta)
     if res:
-        text = res.text
         try:
             info = res.json()
             if info.get("respCode") == "0000":
@@ -372,7 +395,7 @@ async def sichuanairSign(**kwargs):
             if info.get("code") == 200:
                 result.update({"code": 200, "msg": f'川航用户：{token} 今天已签到'})
             else:
-                # cache.delete(f'sichuanair_{token}')
+                cache.delete(f'sichuanair_{token}')
                 result.update({"msg": f'{token} {info.get("message", "")}'})
         except Exception as e:
             logger.error(f'川航签到程序异常 {e}')
@@ -578,6 +601,7 @@ async def meituan(**kwargs):
     token = kwargs.get("token", "")
     if not token:
         return result
+    cache.set(f'meituan_{token}', token)
     meta = {
         "method": "POST",
         "url": "https://mediacps.meituan.com/gundam/gundamGrabV4",
@@ -595,8 +619,9 @@ async def meituan(**kwargs):
     }
     res = await req(**meta)
     if res:
-        cache.set(f'meituan_{token}', token)
         logger.info(res.text)
+        if res.status_code != 200:
+            cache.delete(f'meituan_{token}')
 
 
 # 统一快乐星球
@@ -741,6 +766,90 @@ async def m10086(**kwargs):
         cache.delete(f'10086_{token}')
 
 
+# 中国联通
+async def m10010(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入ecs_token',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'10010_{token}', token)
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://act.10010.com/SigninApp/signin/daySign",
+        "json": {
+            "shareCl": "",
+            "shareCode": ""
+        },
+        "headers": {
+            "Cookie": f"ecs_token={token}"
+        },
+    }
+    res = await req(**meta)
+    try:
+        if res.status_code == 200:
+            logger.info(f'10010 daySign {res.text}')
+            res = res.json()
+            if res["status"] == "0001":
+                cache.delete(f"10010_{token}")
+                result.update({"code": 200, "msg": f'10010用户：{token} 检查token是否有效'})
+                return result
+            result.update({"msg": f'10010 {res["msg"]}'})
+            # 任务
+            meta.update({
+                "url": "https://act.10010.com/SigninApp/superSimpleTask/getTask",
+            })
+            res = await req(**meta)
+            for r in res.json()["data"]:
+                for t in r["taskMsg"]:
+                    # print(t)
+                    if t["achieve"] == '0':
+                        # meta.update({
+                        #     "url": "https://act.10010.com/SigninApp/task/doTask",
+                        #     "json": {
+                        #         "id": "eda7a0714642495f9ffd9fe16be1c57a",
+                        #         # "orderId": "6750f3ae1e79489289ad4e1a08b0fa66",
+                        #         # "imei": "FBE7973D-8368-465C-AF0A-AA979110ECC2",
+                        #         # "prizeType": "nq",
+                        #         "positionFlag": "3"
+                        #     }
+                        # })
+                        meta.update({
+                            "url": "https://act.10010.com/SigninApp/simplyDotask/accomplishDotask",
+                            "json": {
+                                "actId": t.get("actId", ""),
+                                "taskId": t.get("taskId", ""),
+                                "systemCode": "QDQD",
+                                "orderId": "",
+                                "taskName": t.get("title", ""),
+                                "taskType": t.get("taskType", "2")
+                            }
+                        })
+                        res = await req(**meta)
+                        meta.update({
+                            "url": "https://act.10010.com/SigninApp/simplyDotask/doTaskS",
+                            "json": {
+                                "actId": t.get("actId", ""),
+                                "taskId": t.get("taskId", ""),
+                                # "taskType": "2",
+                                "taskType": t.get("taskType", "2"),
+                            },
+                        })
+                        res = await req(**meta)
+                        logger.info(f'{r["id"]} {res.text}')
+    except Exception as e:
+        logger.error(f'10010 签到程序异常:{e}')
+        cache.delete(f"10010_{token}")
+        result.update({"msg": f"10010 签到程序异常"})
+    # 钉钉通知
+    await dingAlert(**result)
+    return result
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -772,6 +881,9 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(weimob(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("weimob_")]
     # 10086
     tasks += [asyncio.create_task(m10086(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("10086_")]
+    # 10010
+    tasks += [asyncio.create_task(m10010(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("10010_")]
+ 
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
     return result_list
