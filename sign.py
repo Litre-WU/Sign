@@ -46,7 +46,8 @@ tip = """
  --weimob       统一快乐星球账户Cookie中的X-WX-Token值
  --10086        中国移动账户Cookie中的SESSION值
  --10010        中国联通账户Cookie中的ecs_token值
- 
+  --dp           东鹏账户header中的sid值
+
  京东pt_pin和pt_key需同时传入！！！
 """
 
@@ -147,12 +148,12 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -628,9 +629,38 @@ async def meituan(**kwargs):
     }
     res = await req(**meta)
     if res:
-        logger.info(res.text)
-        if res.status_code != 200:
-            cache.delete(f'meituan_{token}')
+        try:
+            logger.info(res.text)
+            if res.status_code != 200:
+                result.update({"msg": f"mt {token} 领取失败！"})
+                cache.delete(f'meituan_{token}')
+            else:
+                t = str(time_ns())
+                meta.update({
+                    "method": "POST",
+                    "url": "https://promotion.waimai.meituan.com/playcenter/common/v1/doaction",
+                    "params": {},
+                    "data": {},
+                    "json": {
+                        "activityViewId": "jXL-9iEaRTsv-FZdpX4Z4g",
+                        "actionCode": 1000,
+                        "lat": 23.16397476196289,
+                        "lng": 113.40444946289062,
+                        "gdId": 422324,
+                        "instanceId": f'{t[:14]}.{t[14:].zfill(16)}',
+                        "fpPlatform": 13,
+                        "utmSource": "",
+                        "utmCampaign": "",
+                    }
+                })
+                res = await req(**meta)
+                if res:
+                    logger.info(res.text)
+                result.update({"msg": f"mt {token} 签到成功！"})
+        except Exception as e:
+            result.update({"msg": f"mt {token} 签到程序异常"})
+    # 钉钉通知
+    await dingAlert(**result)
 
 
 # 统一快乐星球
@@ -693,10 +723,8 @@ async def m10086(**kwargs):
     meta = {
         "url": "https://wx.10086.cn/qwhdhub/api/mark/do/mark",
         "headers": {
-            # "Accept-Charset": "utf-8",
-            # "Content-Type": "application/json;charset=UTF-8",
             "x-requested-with": "XMLHttpRequest",
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/20G75 Ariver/1.0.15 leadeon/9.0.0/CMCCIT/tinyApplet WK RVKType(0) NebulaX/1.0.0",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.42(0x18002a2a) NetType/4G Language/zh_CN",
             "login-check": "1",
             "Cookie": f"SESSION_TOKEN={token}",
         }
@@ -716,18 +744,28 @@ async def m10086(**kwargs):
                 "json": {"date": datetime.now().strftime("%Y%m%d")}
             })
             res = await req(**meta)
-            logger.info(f'app 签到{res.text}')
+            logger.info(f'app 签到 {res.text}')
+
+            # # 补签
+            # meta.update({
+            #     "url": "https://wx.10086.cn/qwhdhub/api/mark/mark31/redomark",
+            # })
+            # res = await req(**meta)
+            # logger.info(f'app 补签{res.text}')
 
             # 任务列表
             meta.update({
                 "url": "https://wx.10086.cn/qwhdhub/api/mark/task/taskList",
+                "json": {},
             })
             res = await req(**meta)
             print(res.text)
             for t in res.json()["data"]["tasks"]:
-                taskName, taskId, taskType, jumpUrl = t["taskName"], t["taskId"], t["taskType"], t["jumpUrl"]
+                taskName, taskId, taskType, jumpUrl = t["taskName"], t["taskId"], t["taskCategory"], t["jumpUrl"]
+
                 # 任务详情
                 meta.update({
+                    "method": "POST",
                     "url": "https://wx.10086.cn/qwhdhub/api/mark/task/taskInfo",
                     "json": {"taskId": str(taskId)},
                 })
@@ -736,9 +774,19 @@ async def m10086(**kwargs):
 
                 taskType = res.json()["data"]["taskType"]
 
+                # if jumpUrl.isalnum():
+                #     meta.update({
+                #         "url": "https://wx.10086.cn/qwhdhub/api/mark/mark31/isMark31",
+                #         "headers": {
+                #             "Referer": f'{res.json()["data"]["backUrl"]}?function={taskId}&completeTaskId={taskType}'
+                #         }
+                #     })
+                #     res = await req(**meta)
+                #     print(res.text)
 
                 # # 公众号任务 获取回调地址 （需要sid）
                 # meta.update({
+                #     "method": "POST",
                 #     "url": "https://wx.10086.cn/website/nrapigate/nrmix/activityGroup/getSignTask",
                 #     "json": {"ystitle": "", "taskId": str(taskId)},
                 # })
@@ -755,7 +803,6 @@ async def m10086(**kwargs):
 
                 # app任务完成
                 meta.update({
-                    "method": "POST",
                     "url": "https://wx.10086.cn/qwhdhub/api/mark/task/finishTask",
                     "json": {"taskId": str(taskId), "taskType": str(taskType)},
                 })
@@ -770,9 +817,11 @@ async def m10086(**kwargs):
                 res = await req(**meta)
                 logger.info(f'getTaskAward {taskName} {taskType} {taskId} {res.text}')
 
-            # await dingAlert(**result)
     except Exception as e:
+        logger.error(f'10086 {token} 签到程序异常:{e}')
         cache.delete(f'10086_{token}')
+
+    await dingAlert(**result)
 
 
 # 中国联通
@@ -859,6 +908,47 @@ async def m10010(**kwargs):
     return result
 
 
+# 有赞(东鹏特饮)
+async def youzan_dp(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入sid',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'dp_{token}', token)
+    # 签到
+    meta = {
+        "url": "https://h5.youzan.com/wscump/checkin/checkinV2.json",
+        "params": {
+            "checkinId": "3124",
+            # "app_id": "wxbe8abd76a650b858",
+            # "kdt_id": "15131322",
+            # "access_token": ""
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.42(0x18002a2b) NetType/4G Language/zh_CN",
+            "Extra-Data": '{"is_weapp":1,"sid":"%s","version":"2.151.5","client":"weapp","bizEnv":"wsc","uuid":""}' % token
+        }
+    }
+    res = await req(**meta)
+    try:
+        if res.status_code == 200:
+            logger.info(f'东鹏 checkin {res.text}')
+            res = res.json()
+            result.update({"msg": f'dp {res["msg"]}'})
+            if res["code"] == -1:
+                cache.delete(f"dp_{token}")
+    except Exception as e:
+        logger.error(f'dp 签到程序异常:{e}')
+        cache.delete(f"dp_{token}")
+        result.update({"msg": f"dp {token} 签到程序异常"})
+        # 钉钉通知
+    await dingAlert(**result)
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -892,7 +982,9 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(m10086(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("10086_")]
     # 10010
     tasks += [asyncio.create_task(m10010(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("10010_")]
- 
+    # 东鹏特饮
+    tasks += [asyncio.create_task(youzan_dp(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("dp_")]
+
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
     return result_list
