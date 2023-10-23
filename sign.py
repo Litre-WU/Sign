@@ -968,7 +968,6 @@ async def crontab_task(**kwargs):
     for k, v in os.environ.items():
         if k.lower() in pre_list:
             for v_ in v.split(";"):
-                print(f'{k.lower()}_{v_}', v_)
                 cache.set(f'{k.lower()}_{v_}', v_)
              
     # tasks = [asyncio.create_task(signBeanAct(**account_list[i])) for i in range(len(account_list))]
