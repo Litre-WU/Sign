@@ -47,8 +47,8 @@ tip = """
  --weimob       统一快乐星球账户Cookie中的X-WX-Token值
  --10086        中国移动账户Cookie中的SESSION值
  --10010        中国联通账户Cookie中的ecs_token值
-  --dp           东鹏账户header中的sid值
- --95516        闪惠账户header中的Authorization值
+ --dp           东鹏账户header中的sid值
+ --95516        云闪付账户header中的Authorization值
  --kraf         卡亨星球账户header中的token值
  
  京东pt_pin和pt_key需同时传入！！！
@@ -151,7 +151,7 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值); 闪惠/95516(传入Authorization值); 卡亨星球/kraf(传入token值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值); 云闪付/95516(传入Authorization值); 卡亨星球/kraf(传入token值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
@@ -952,7 +952,7 @@ async def youzan_dp(**kwargs):
     await dingAlert(**result)
 
 
-# 闪惠
+# 云闪付
 async def m95516(**kwargs):
     result = {
         "code": 400,
@@ -1085,7 +1085,7 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(m10010(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("10010_")]
     # 东鹏特饮
     tasks += [asyncio.create_task(youzan_dp(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("dp_")]
-    # 闪惠
+    # 云闪付
     tasks += [asyncio.create_task(m95516(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("95516_")]
     # 卡亨星球
     tasks += [asyncio.create_task(kraf(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("kraf_")]
