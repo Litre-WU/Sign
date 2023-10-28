@@ -48,7 +48,8 @@ tip = """
  --10086        中国移动账户Cookie中的SESSION值
  --10010        中国联通账户Cookie中的ecs_token值
   --dp           东鹏账户header中的sid值
-
+ --95516        闪惠账户header中的Authorization值
+ 
  京东pt_pin和pt_key需同时传入！！！
 """
 
@@ -149,12 +150,12 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值); 闪惠/95516(传入Authorization值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -950,6 +951,47 @@ async def youzan_dp(**kwargs):
     await dingAlert(**result)
 
 
+# 闪惠
+async def m95516(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入Authorization',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'95516_{token}', token)
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://youhui.95516.com/newsign/api/daily_sign_in",
+        "json": {"date": datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")},
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.42(0x18002a2b) NetType/4G Language/zh_CN",
+            "Referer": "https://youhui.95516.com/newsign/public/app/index.html",
+            "Authorization": token if token.startswith("Bearer") else f"Bearer {token}"
+        }
+    }
+    res = await req(**meta)
+    try:
+        if res and res.status_code == 200:
+            logger.info(f'95516 daily_sign_in {res.text}')
+            result.update({"msg": f'95516 签到成功！'})
+        else:
+            logger.error(f'95516 {res.text}')
+            result.update({"msg": f'95516 {token} {res.json().get("message", "")}'})
+            if res.status_code == 401:
+                cache.delete(f"95516_{token}")
+    except:
+        logger.error(f'95516 签到程序异常:{e}')
+        cache.delete(f"95516_{token}")
+        result.update({"msg": f"95516 {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -993,7 +1035,9 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(m10010(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("10010_")]
     # 东鹏特饮
     tasks += [asyncio.create_task(youzan_dp(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("dp_")]
-
+    # 95516
+    tasks += [asyncio.create_task(m95516(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("95516_")]
+ 
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
     return result_list
