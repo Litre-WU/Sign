@@ -49,6 +49,7 @@ tip = """
  --10010        中国联通账户Cookie中的ecs_token值
   --dp           东鹏账户header中的sid值
  --95516        闪惠账户header中的Authorization值
+ --kraf         卡亨星球账户header中的token值
  
  京东pt_pin和pt_key需同时传入！！！
 """
@@ -150,12 +151,12 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值); 闪惠/95516(传入Authorization值)")
+          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值); 闪惠/95516(传入Authorization值); 卡亨星球/kraf(传入token值)")
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -983,10 +984,59 @@ async def m95516(**kwargs):
             result.update({"msg": f'95516 {token} {res.json().get("message", "")}'})
             if res.status_code == 401:
                 cache.delete(f"95516_{token}")
-    except:
+    except Exception as e:
         logger.error(f'95516 签到程序异常:{e}')
         cache.delete(f"95516_{token}")
         result.update({"msg": f"95516 {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+
+
+# 卡亨星球
+async def kraf(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入token',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'kraf_{token}', token)
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://kraftheinzcrm.kraftheinz.net.cn/crm/public/index.php/api/v1/dailySign",
+
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.42(0x18002a2f) NetType/4G",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "token": token,
+        }
+    }
+    res = await req(**meta)
+    try:
+        if res and res.status_code == 200:
+            logger.info(f'kraf dailySign {res.text}')
+            result.update({"msg": f'kraf {res.json()["msg"]}'})
+            # 分享
+            meta.update({
+                "url": "https://kraftheinzcrm.kraftheinz.net.cn/crm/public/index.php/api/v1/recordScoreShare",
+                "data": {
+                    "invite_id": token,
+                    "cookbook_id": "21"
+                },
+            })
+            res = await req(**meta)
+            logger.info(f'kraf recordScoreShare {res.text}')
+        else:
+            logger.error(f'kraf {res.text}')
+            cache.delete(f"kraf_{token}")
+    except Exception as e:
+        logger.error(f'kraf 签到程序异常:{e}')
+        cache.delete(f"kraf_{token}")
+        result.update({"msg": f"kraf {token} 签到程序异常"})
 
     # 钉钉通知
     await dingAlert(**result)
@@ -1035,8 +1085,10 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(m10010(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("10010_")]
     # 东鹏特饮
     tasks += [asyncio.create_task(youzan_dp(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("dp_")]
-    # 95516
+    # 闪惠
     tasks += [asyncio.create_task(m95516(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("95516_")]
+    # 卡亨星球
+    tasks += [asyncio.create_task(kraf(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("kraf_")]
  
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
