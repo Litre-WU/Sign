@@ -16,6 +16,7 @@ from base64 import b64encode
 from pathlib import Path
 from uuid import uuid4
 from random import uniform, sample
+from urllib.parse import urlparse, parse_qs
 
 # 使用apscheduler 调用定时任务
 from datetime import datetime, timedelta
@@ -1031,8 +1032,22 @@ async def kraf(**kwargs):
             res = await req(**meta)
             logger.info(f'kraf recordScoreShare {res.text}')
         else:
-            logger.error(f'kraf {res.text}')
-            cache.delete(f"kraf_{token}")
+            # 解锁菜谱
+            meta = {
+                "url": "https://inspiration.kraftheinz.net.cn/inspiration/web/",
+                "params": {"s": "/api/menu/unlockDailyMenu"},
+                "headers": {
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.42(0x18002a2f) NetType/4G",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "token": token,
+                }
+            }
+            res = await req(**meta)
+            if res and res.status_code == 200:
+                logger.info(f'kraf unlockDailyMenu {res.text}')
+                result.update({"msg": f'kraf 解锁每日菜谱！'})
+            else:
+                cache.delete(f"kraf_{token}")
     except Exception as e:
         logger.error(f'kraf 签到程序异常:{e}')
         cache.delete(f"kraf_{token}")
