@@ -36,26 +36,28 @@ db_path = str(Path(__file__).parent / "tmp")
 cache = Cache(db_path)
 
 
-tip = """
-脚本输入参数(crontab执行脚本时使用)
- 
- --pt_pin       京东Cookie中获取pt_pin值
- --pt_key       京东Cookie中获取pt_key值
- --csai         南航账户的Cookie中sign_user_token值
- --sichuanair   川航账户的Cookie中access-token值
- --ctrip        携程账户的Cookie中cticket值
- --meituan      美团账户Cookie中的token值
- --weimob       统一快乐星球账户Cookie中的X-WX-Token值
- --10086        中国移动账户Cookie中的SESSION值
- --10010        中国联通账户Cookie中的ecs_token值
- --dp           东鹏账户header中的sid值
- --95516        云闪付账户header中的Authorization值
- --kraf         卡亨星球账户header中的token值
- 
+description = """
+脚本输入参数及路由地址
+
+ --pt_pin       [/signBeanAct]京东Cookie中获取pt_pin值
+ --pt_key       [/signBeanAct]京东Cookie中获取pt_key值
+ --csai         [/csairSign]南航账户Cookie中sign_user_token值
+ --sichuanair   [/sichuanairSign]川航账户Cookie中access-token值
+ --ctrip        [/ctripSign]携程账户Cookie中cticket值
+ --meituan      [/meituan]美团账户Cookie中token值
+ --weimob       [/weimob]统一快乐星球账户Cookie中X-WX-Token值
+ --10086        [/10086]中国移动账户Cookie中SESSION值
+ --10010        [/10010]中国联通账户Cookie中ecs_token值
+ --dp           [/dp]东鹏账户header中sid值
+ --95516        [/95516]云闪付账户header中Authorization值
+ --kraf         [/kraf]卡亨星球账户header中token值
+ --erke         [/erke]鸿星尔克账户的memberId值
+
+
  京东pt_pin和pt_key需同时传入！！！
 """
 
-print(tip)
+print(description)
 
 args = sys.argv
 
@@ -151,13 +153,12 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 
 # 类token签到签到
-@app.post("/{path}", tags=["类token签到"],
-          description="南航/csairSign(传入账户的sign_user_token值); 川航/sichuanairSign(传入access-token值); 携程/ctripSign(传入账户的cticket值); 微信龙舟游戏/dragon_boat_2023(传入传入session_token值); 美团优惠券/meituan(传入账户token值); 统一快乐星球/weimob(传入X-WX-Token值); 中国移动/10086(传入SESSION值); 中国联通/10010(传入ecs_token值); 东鹏/dp(传入sid值); 云闪付/95516(传入Authorization值); 卡亨星球/kraf(传入token值)")
+@app.post("/{path}", tags=["类token签到"], description=description)
 async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -1057,6 +1058,44 @@ async def kraf(**kwargs):
     await dingAlert(**result)
 
 
+# 达摩网络(鸿星尔克)
+async def demogic_erke(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入memberId',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'erke_{token}', token)
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://hope.demogic.com/gic-wx-app/member_sign.json",
+        "data": {
+            "memberId": token,
+        },
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.42(0x18002a2f) NetType/4G Language/zh_CN"
+        }
+    }
+    res = await req(**meta)
+    try:
+        if res and res.status_code == 200:
+            logger.info(f'erke dailySign {res.text}')
+            result.update({"msg": f'erke {res.json()["errmsg"]}'})
+        else:
+            cache.delete(f"erke_{token}")
+    except Exception as e:
+        logger.error(f'erke 签到程序异常:{e}')
+        cache.delete(f"erke_{token}")
+        result.update({"msg": f"erke {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -1104,6 +1143,8 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(m95516(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("95516_")]
     # 卡亨星球
     tasks += [asyncio.create_task(kraf(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("kraf_")]
+    # 鸿星尔克
+    tasks += [asyncio.create_task(demogic_erke(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("erke_")]
  
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
