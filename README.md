@@ -3,9 +3,19 @@
 
 (目前支持京东京豆、南航、川航、携程、微信支付有优惠小程序龙舟游戏刷免费提现券、美团优惠券、统一快乐星球、中国移动、中国联通、东鹏特饮、云闪付、卡亨星球、鸿星尔克)
 
-运行项目
-
 `pip install uvicorn fastapi httpx loguru diskcache apscheduler SQLAlchemy python-dateutil -i https://pypi.tuna.tsinghua.edu.cn/simple`
+
+运行项目（两种方式运行: 第一种直接运行脚本;第二种启动服务后通过接口添加token设置定时任务）
+
+第一种：直接运行脚本
+
+`python sign.py`
+
+追加参数
+
+`python sign.py --pt_pin jd_XXX --pt_key AAJXXX`
+
+第二种：启动服务(服务可用于添加token和设置定时任务)
 
 `uvicorn sign:app --host 0.0.0.0 --port 8081`
 
