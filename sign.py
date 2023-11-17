@@ -276,6 +276,19 @@ async def signBeanAct(**kwargs):
         except Exception as e:
             logger.error(f'{text} {e}')
             result.update({"msg": f"京豆签到程序异常 {kwargs}"})
+        # 京东快递
+        meta.update({
+            "url": "https://lop-proxy.jd.com/jiFenApi/signInAndGetReward",
+            "params": {},
+            "json": [{"userNo": "$cooMrdGatewayUid$"}],
+            "headers": {
+                "AppParams": '{"appid":158,"ticket_type":"m"}',
+                # "uuid": "16999712042251211957764",
+                "uuid": "%.f" % (time() * 10 ** 13),
+                "LOP-DN": "jingcai.jd.com"
+            }
+        })
+        await req(**meta)
     # 钉钉通知
     logger.info(result)
     await dingAlert(**result)
