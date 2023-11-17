@@ -46,7 +46,7 @@ description = """
  --ctrip        [/ctripSign]携程账户Cookie中cticket值
  --meituan      [/meituan]美团账户Cookie中token值
  --weimob       [/weimob]统一快乐星球账户Cookie中X-WX-Token值
- --10086        [/10086]中国移动账户Cookie中SESSION值
+ --10086        [/10086]中国移动账户Cookie中SESSION_TOKEN值
  --10010        [/10010]中国联通账户Cookie中ecs_token值
  --dp           [/dp]东鹏账户header中sid值
  --95516        [/95516]云闪付账户header中Authorization值
@@ -718,7 +718,7 @@ async def weimob(**kwargs):
 async def m10086(**kwargs):
     result = {
         "code": 400,
-        "msg": f'请输入SESSION',
+        "msg": f'请输入SESSION_TOKEN',
         "time": int(time())
     }
     token = kwargs.get("token", "")
