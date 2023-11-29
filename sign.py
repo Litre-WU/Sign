@@ -4,7 +4,7 @@ from time import time, sleep, asctime
 from datetime import datetime
 from calendar import monthrange
 from loguru import logger
-from fastapi import FastAPI, BackgroundTasks, Body
+from fastapi import FastAPI, BackgroundTasks, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from typing import Dict, Union
@@ -164,6 +164,47 @@ async def api(request: Request, path: str, background_tasks: BackgroundTasks,
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
         result.update({"code": 200, "msg": f'{path} {token} 已更新'})
     return result
+
+# WebSocket连接管理器
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        await websocket.send_text("服务已启动！")
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+
+manager = ConnectionManager()
+
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: int, background_tasks: BackgroundTasks):
+    print(websocket.client.host, client_id, websocket.query_params._dict)
+    await manager.connect(websocket)
+    await asyncio.sleep(2)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            print(data)
+            await manager.send_personal_message(data, websocket)
+            await asyncio.sleep(2)
+            await manager.send_personal_message("任务已完成！", websocket)
+            # await manager.broadcast(f"Client #{client_id} says: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        await manager.broadcast(f"{client_id} 下线！")
 
 
 # 请求函数
@@ -1107,6 +1148,134 @@ async def demogic_erke(**kwargs):
 
     # 钉钉通知
     await dingAlert(**result)
+
+
+# 腾讯自选股
+async def qqstock(**kwargs):
+    openid = kwargs.get("openid", "")
+    fskey = kwargs.get("fskey", "")
+    meta = {
+        "url": "https://wzq.tenpay.com/cgi-bin/welfare_center.fcgi",
+        "params": {
+            "action": "home",
+            "channel": "1",
+            # "sign_actid": "2002",
+            # "daily_task_actid": "1111",
+            # "continue_task_actid": "1030",
+            "zxgmp_lct": "0",
+            "suprise_position": "welfare",
+            "_": int(time() * 1000),
+            "openid": openid,
+            "fskey": fskey,
+            "access_token": "",
+            "_appName": "ios",
+            "_appver": "11.10.0",
+            "_osVer": "17.1.1",
+            "_devId": "",
+            "_ui": "",
+        },
+        "headers": {
+            "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 qqstock/11.10.0 deviceType/iphone",
+        }
+    }
+    res = await req(**meta)
+    # 日常任务
+    act_id = res.json()["continue_task"]["act_id"]
+    for pkgs in res.json()["continue_task"]["task_pkgs"]:
+        for t in pkgs["tasks"]:
+            kwargs.update({"actid": act_id, "id": t["id"], "tid": t["tid"]})
+            await qqstock_activity_task(**kwargs)
+    for pkgs in res.json()["daily_task"]["task_pkgs"]:
+        for t in pkgs["tasks"]:
+            kwargs.update({"actid": 1111, "id": t["id"], "tid": t["tid"]})
+            await qqstock_activity_task(**kwargs)
+    # 日常分享任务
+    task_list = ['news_share', 'user_public', 'task_72_1113', 'task_51_1101', 'task_50_1110', 'task_50_1112',
+                 'task_51_1032',
+                 'task_50_1111', 'task_50_1113', 'task_50_1101', 'task_51_1111', 'task_51_1100', 'task_75_1112',
+                 'task_50_1033', 'task_51_1113', 'task_76_1113', 'task_51_1112', 'task_51_1033', 'task_50_1032',
+                 'task_74_1113', 'task_51_1110', 'task_66_1110', 'task_75_1113', 'task_50_1100']
+    for t in task_list:
+        kwargs.update({"share_type": t})
+        await app_activity_share(**kwargs)
+
+
+# 腾讯自选股日常任务
+async def qqstock_activity_task(**kwargs):
+    meta = {
+        "url": "https://wzq.tenpay.com/cgi-bin/activity_task.fcgi",
+        "params": {
+            "actid": kwargs.get("actid", "1033"),
+            "id": kwargs.get("id", "5"),
+            "tid": kwargs.get("tid", "47"),
+            "action": "taskstatus",
+            "_": int(time() * 1000),
+            "openid": kwargs.get("openid", ""),
+            "fskey": kwargs.get("fskey", ""),
+            "channel": "1",
+            "access_token": "",
+            "_appName": "ios",
+            "_appver": "11.10.0",
+            "_osVer": "17.1.1",
+            "_devId": "",
+            "_ui": ""
+        },
+        "headers": {
+            "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 qqstock/11.10.0 deviceType/iphone",
+        }
+    }
+    res = await req(**meta)
+    if res and res.json().get("done") == "0":
+        logger.info(f'taskstatus {res.text}')
+        meta["params"].update({"action": "taskticket"})
+        res = await req(**meta)
+        logger.info(f'taskticket {res.text}')
+        meta["params"].update({"action": "taskdone", "task_ticket": res.json()["task_ticket"]})
+        res = await req(**meta)
+        logger.info(f'taskdone {res.text}')
+
+
+# 腾讯自选股日常分享任务
+async def qqstock_activity_share(**kwargs):
+    share_type = kwargs.get("share_type", "") or f'task_{kwargs.get("tid", "50")}_{kwargs.get("actid", "1033")}'
+    meta = {
+        "method": "POST",
+        "url": "https://wzq.tenpay.com/cgi-bin/activity_share.fcgi",
+        "params": {
+            "t": int(time() * 1000)
+        },
+        "data": {
+            "channel": "1",
+            "action": "query_share_code",
+            "share_type": share_type,
+            "_rndtime": int(time()),
+            "_appName": "ios",
+            "openid": kwargs.get("openid", ""),
+            "fskey": kwargs.get("fskey", ""),
+            "buildType": "store",
+            "check": "11",
+            "_idfa": "",
+            "lang": "zh_CN"
+        },
+        "headers": {
+            "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 qqstock/11.10.0 deviceType/iphone",
+        }
+    }
+    res = await req(**meta)
+    logger.info(f'share_code {res.text}')
+    if res and res.json().get("share_code"):
+        meta["data"].update({
+            "action": "share_code_info",
+            "share_type": share_type,
+            "share_code": res.json()["share_code"]
+        })
+        res = await req(**meta)
+        if res:
+            logger.info(f'share_done {res.text}')
+            return share_type
 
 
 # 定时任务
