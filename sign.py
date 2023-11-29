@@ -1198,7 +1198,7 @@ async def qqstock(**kwargs):
                  'task_74_1113', 'task_51_1110', 'task_66_1110', 'task_75_1113', 'task_50_1100']
     for t in task_list:
         kwargs.update({"share_type": t})
-        await app_activity_share(**kwargs)
+        await qqstock_activity_share(**kwargs)
 
 
 # 腾讯自选股日常任务
