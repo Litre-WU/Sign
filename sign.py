@@ -201,7 +201,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int, background_ta
             await manager.send_personal_message(data, websocket)
             await asyncio.sleep(2)
             await manager.send_personal_message("任务已完成！", websocket)
-            # await manager.broadcast(f"Client #{client_id} says: {data}")
+            # await manager.broadcast(f"{client_id} : {data}")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         await manager.broadcast(f"{client_id} 下线！")
