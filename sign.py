@@ -52,8 +52,9 @@ description = """
  --95516        [/95516]云闪付账户header中Authorization值
  --kraf         [/kraf]卡亨星球账户header中token值
  --erke         [/erke]鸿星尔克账户的memberId值
- --decathlon    [/decathlon_]本田账户的Authorization值
-
+ --decathlon    [/decathlon]迪卡侬账户的Authorization值
+ --ys           [/ys]萤石账户的sessionid值
+ 
  京东pt_pin和pt_key需同时传入！！！
 """
 
@@ -158,7 +159,7 @@ async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke, "decathlon": decathlon}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke, "decathlon": decathlon, "ys": ys}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -1316,6 +1317,63 @@ async def decathlon(**kwargs):
     await dingAlert(**result)
 
 
+# 萤石
+async def ys(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入sessionid',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'ys_{token}', token)
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://api.ys7.com/v3/videoclips/user/check_in",
+        "headers": {
+            "sessionid": token,
+        }
+    }
+    try:
+        res = await req(**meta)
+        if res and res.status_code == 200:
+            logger.info(f'萤石 sign {res.text}')
+            result.update({"msg": f'萤石 {res.json()["meta"]["message"]}'})
+            # 每日任务
+            meta.update({
+                "url": "https://api.ys7.com/v3/integral/task/list",
+                "data": {
+                    "pageNum": "0",
+                    "pageSize": "100",
+                    "appDevInfo": dumps(
+                        {"model": "iPhone 12 Pro", "brand": "apple", "packageName": "com.hikvision.videogo",
+                         "platform": 1})
+                }
+            })
+            res = await req(**meta)
+            if res and res.status_code == 200:
+                for t in res.json()["taskList"]:
+                    meta.update({
+                        "url": "https://api.ys7.com/v3/integral/task/complete",
+                        "data": {
+                            "eventkey": t["taskEventKey"],
+                            "filterParam": "12345",
+                        }
+                    })
+                    res = await req(**meta)
+                    if res and res.status_code == 200:
+                        logger.info(f'萤石 {t["taskName"]} {res.text}')
+    except Exception as e:
+        logger.error(f'萤石 签到程序异常:{e}')
+        cache.delete(f"ys_{token}")
+        result.update({"msg": f"萤石 {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -1366,8 +1424,9 @@ async def crontab_task(**kwargs):
     # 鸿星尔克
     tasks += [asyncio.create_task(demogic_erke(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("erke_")]
     # 迪卡侬
-    tasks += [asyncio.create_task(decathlon(**{"token": cache[k]})) for k in cache.iterkeys() if
-              k.startswith("decathlon")]
+    tasks += [asyncio.create_task(decathlon(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("decathlon")]
+    # 萤石
+    tasks += [asyncio.create_task(ys(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("ys")]
  
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
