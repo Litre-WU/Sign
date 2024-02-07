@@ -52,7 +52,7 @@ description = """
  --95516        [/95516]云闪付账户header中Authorization值
  --kraf         [/kraf]卡亨星球账户header中token值
  --erke         [/erke]鸿星尔克账户的memberId值
-
+ --decathlon    [/decathlon_]本田账户的Authorization值
 
  京东pt_pin和pt_key需同时传入！！！
 """
@@ -158,7 +158,7 @@ async def api(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke, "decathlon": decathlon}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -1279,6 +1279,43 @@ async def qqstock_activity_share(**kwargs):
             return share_type
 
 
+# 迪卡侬
+async def decathlon(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入Authorization',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'decathlon_{token}', token)
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://api-cn.decathlon.com.cn/membership/membership-portal/mp/api/v1/business-center/reward/CHECK_IN_DAILY",
+        "headers": {
+            "Authorization": token if token.startswith("Bearer") else f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.43(0x18002b2d) NetType/4G Language/zh_CN",
+        }
+    }
+    res = await req(**meta)
+    try:
+        if res and res.status_code == 200:
+            logger.info(f'decathlon sign {res.text}')
+            result.update({"msg": f'decathlon {res.json()["code"]}'})
+        else:
+            cache.delete(f"decathlon_{token}")
+    except Exception as e:
+        logger.error(f'迪卡侬 签到程序异常:{e}')
+        cache.delete(f"decathlon_{token}")
+        result.update({"msg": f"迪卡侬 {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -1328,6 +1365,9 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(kraf(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("kraf_")]
     # 鸿星尔克
     tasks += [asyncio.create_task(demogic_erke(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("erke_")]
+    # 迪卡侬
+    tasks += [asyncio.create_task(decathlon(**{"token": cache[k]})) for k in cache.iterkeys() if
+              k.startswith("decathlon")]
  
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
