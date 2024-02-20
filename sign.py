@@ -142,7 +142,7 @@ async def shutdown_event():
 
 # 京豆签到
 @app.post("/signBeanAct", tags=["京东签到"])
-async def api(request: Request, background_tasks: BackgroundTasks,
+async def jd_sign(request: Request, background_tasks: BackgroundTasks,
               pt_pin: Union[str, None] = Body(default="jd_XXX"),
               pt_key: Union[str, None] = Body(default="AAJkPgXXX_XXX"), time: Union[str, None] = Body(default="09:00:00")):
     cache.set(pt_pin, pt_key)
@@ -155,7 +155,7 @@ async def api(request: Request, background_tasks: BackgroundTasks,
 
 # 类token签到签到
 @app.post("/{path}", tags=["类token签到"], description=description)
-async def api(request: Request, path: str, background_tasks: BackgroundTasks,
+async def token_sign(request: Request, path: str, background_tasks: BackgroundTasks,
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
@@ -165,6 +165,24 @@ async def api(request: Request, path: str, background_tasks: BackgroundTasks,
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
         result.update({"code": 200, "msg": f'{path} {token} 已更新'})
     return result
+
+
+# Cookie签到
+@app.post("/cookie/{path}", tags=["cookie签到"])
+async def cookie_sign(request: Request, path: str, background_tasks: BackgroundTasks,
+              cookie: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
+    Cookie = cookies.SimpleCookie()
+    Cookie.load(cookie)
+    cookie = {k: morsel.value for k, morsel in Cookie.items()}
+    result = {"code": 400, "msg": "请检查路由路径!"}
+    path_dict = {"qqstock": qqstock}
+    if path in path_dict.keys():
+        background_tasks.add_task(path_dict[path], **{"cookie": cookie})
+        data_time = parse(time)
+        scheduler.add_job(id="", name="", func=path_dict[path], kwargs={"cookie": cookie}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
+        result.update({"code": 200, "msg": f'{path} cookie 已更新'})
+    return result
+
 
 # WebSocket连接管理器
 class ConnectionManager:
@@ -1152,18 +1170,157 @@ async def demogic_erke(**kwargs):
     await dingAlert(**result)
 
 
-# 腾讯自选股
+#  腾讯自选股微信每日任务
+async def wx_daily_task(**kwargs):
+    uin = kwargs.get("uin")
+    skey = kwargs.get("skey")
+    if not any([uin, skey]):
+        return None
+
+    meta = {
+        "url": "https://wzq.gtimg.com/resources/vtools/daily_task_config_utf8.json",
+        "params": {
+            "t": int(time() * 1000),
+        }
+    }
+    res = await req(**meta)
+    print(res.text)
+    # for t in res.json()["daily_task_config"]:
+    #     await activity_task(**{"actid": t["actid"], "id": t["act_id"], "tid": t["tid"]})
+    meta.update({
+        "url": "https://wzq.tenpay.com/cgi-bin/welfare_center.fcgi",
+        "params": {
+            "action": "home",
+            "channel": "0",
+            # "sign_actid": "2002",
+            # "daily_task_actid": "1110",
+            # "continue_task_actid": "1032",
+            "zxgmp_lct": "0",
+            "suprise_position": "welfare",
+            "_": int(time() * 1000)
+        },
+        "headers": {
+            "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.43(0x18002b2d) NetType/4G Language/zh_CN",
+        },
+        "cookies": {
+            "wzq_qlskey": skey,
+            "wzq_qluin": uin,
+        }
+    })
+    res = await req(**meta)
+    print(res.text)
+    # 日常任务
+    act_id = res.json()["continue_task"]["act_id"]
+    for pkgs in res.json()["continue_task"]["task_pkgs"]:
+        for t in pkgs["tasks"]:
+            kwargs.update({"actid": act_id, "id": t["id"], "tid": t["tid"]})
+            await activity_task(**kwargs)
+    # 日常分享任务
+    act_id = "1110"
+    for pkgs in res.json()["daily_task"]["task_pkgs"]:
+        for t in pkgs["tasks"]:
+            kwargs.update({"actid": act_id, "id": t["id"], "tid": t["tid"]})
+            await activity_task(**kwargs)
+            await activity_share(**kwargs)
+
+    # 猜涨跌
+    meta.update({
+        "method": "POST",
+        "url": "https://wzq.tenpay.com/cgi-bin/guess_op.fcgi",
+        "data": {
+            "action": "2",
+            "act_id": "3",
+            "user_answer": "1",
+            "date": (datetime.now() + timedelta(days=1)).strftime("%Y%m%d"),
+            "outer_src": "1",
+            "scenes": "5",
+            "xcxname": "zxgxcx",
+            "come_from": "2",
+        },
+    })
+    res = await req(**meta)
+    print(res.text)
+
+
+# 腾讯自选股分享任务
+async def activity_share(**kwargs):
+    share_type = kwargs.get("share_type", "") or f'task_{kwargs.get("tid", "51")}_{kwargs.get("actid", "1110")}'
+    meta = {
+        "method": "POST",
+        "url": "https://wzq.tenpay.com/cgi-bin/activity_share.fcgi",
+        "data": {
+            "action": "query_share_code",
+            "share_type": share_type,
+            "extra_info": kwargs.get("id", "21")
+        },
+        "headers": {
+            "Referer": "https://wzq.tenpay.com/mp/v2/index.html",
+            "User-Agent": "QQStock/23110918 CFNetwork/1485 Darwin/23.1.0",
+        },
+        "cookies": {
+            "wzq_qlskey": "v0b94cb14256565a21828f0fd89e04d9",
+            "wzq_qluin": "os-ppuL8gr8GFVR4CVdDZOmAaajI",
+        }
+    }
+    res = await req(**meta)
+    logger.info(f'share_code {res.text}')
+    if res and res.json().get("share_code"):
+        # 其它账号
+        meta["data"].update({
+            "action": "share_code_info",
+            "share_type": share_type,
+            "share_code": res.json()["share_code"]
+        })
+        res = await req(**meta)
+        if res:
+            logger.info(f'share_done {res.text}')
+
+
+# 日常任务
+async def activity_task(**kwargs):
+    meta = {
+        "method": "POST",
+        "url": "https://wzq.tenpay.com/cgi-bin/activity_task.fcgi",
+        "params": {
+            "t": int(time() * 1000),
+        },
+        "data": {
+            "channel": "0",
+            "action": "taskstatus",
+            "actid": kwargs.get("actid", ""),
+            "id": kwargs.get("id", ""),
+            "tid": kwargs.get("tid", ""),
+        },
+        "headers": {
+            "Referer": "https://wzq.tenpay.com/mp/v2/index.html",
+            "User-Agent": "QQStock/23110918 CFNetwork/1485 Darwin/23.1.0",
+        },
+        "cookies": {
+            "wzq_qlskey": kwargs.get("skey", "v1e2b04f21065601afd25f4889dcabea"),
+            "wzq_qluin": kwargs.get("uin", "os-ppuP1KuvWz1b3asAs7PVrrMxc"),
+        }
+    }
+    res = await req(**meta)
+    logger.info(f'taskstatus {res.text}')
+    if res.json().get("done") == "0":
+        meta["data"].update({"action": "taskticket"})
+        res = await req(**meta)
+        logger.info(f'taskticket {res.text}')
+        meta["data"].update({"action": "taskdone", "task_ticket": res.json()["task_ticket"]})
+        res = await req(**meta)
+        logger.info(f'taskdone {res.text}')
+
+
+# 腾讯自选股app每日任务
 async def qqstock(**kwargs):
     openid = kwargs.get("openid", "")
-    fskey = kwargs.get("fskey", "")
+    fskey = kwargs.get("skey", "")
     meta = {
         "url": "https://wzq.tenpay.com/cgi-bin/welfare_center.fcgi",
         "params": {
             "action": "home",
             "channel": "1",
-            # "sign_actid": "2002",
-            # "daily_task_actid": "1111",
-            # "continue_task_actid": "1030",
             "zxgmp_lct": "0",
             "suprise_position": "welfare",
             "_": int(time() * 1000),
@@ -1171,14 +1328,15 @@ async def qqstock(**kwargs):
             "fskey": fskey,
             "access_token": "",
             "_appName": "ios",
-            "_appver": "11.10.0",
-            "_osVer": "17.1.1",
+            "_appver": "11.13.0",
+            "_osVer": "17.3",
             "_devId": "",
             "_ui": "",
         },
         "headers": {
             "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 qqstock/11.10.0 deviceType/iphone",
+            # "User-Agent": "QQStock/23110918 CFNetwork/1485 Darwin/23.1.0",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 qqstock/11.13.0 deviceType/iphone",
         }
     }
     res = await req(**meta)
@@ -1202,6 +1360,37 @@ async def qqstock(**kwargs):
         kwargs.update({"share_type": t})
         await qqstock_activity_share(**kwargs)
 
+    # 猜涨跌
+    meta.update({
+        "url": "https://zqact.tenpay.com/cgi-bin/guess_op.fcgi",
+        "params": {
+            "channel": "1",
+            "action": "6",
+            "bid": "1001",
+            "new_version": "3",
+            "_": int(time() * 1000),
+            "openid": kwargs.get("openid", ""),
+            "fskey": kwargs.get("skey", ""),
+            "channel": "1",
+            "access_token": "",
+            "_appName": "ios",
+            "_appver": "11.10.0",
+            "_osVer": "17.1.1",
+            "_devId": "",
+            "_ui": ""
+        },
+    })
+    res = await req(**meta)
+    if res:
+        print(res.text.strip())
+    # 长牛任务
+    kwargs.update({"actid": 1105})
+    await qqstock_activity_year_party(**kwargs)
+
+    # 微信任务
+    kwargs.update({"skey": kwargs["wx_skey"]})
+    await wx_daily_task(**meta)
+
 
 # 腾讯自选股日常任务
 async def qqstock_activity_task(**kwargs):
@@ -1214,7 +1403,7 @@ async def qqstock_activity_task(**kwargs):
             "action": "taskstatus",
             "_": int(time() * 1000),
             "openid": kwargs.get("openid", ""),
-            "fskey": kwargs.get("fskey", ""),
+            "fskey": kwargs.get("skey", ""),
             "channel": "1",
             "access_token": "",
             "_appName": "ios",
@@ -1225,18 +1414,18 @@ async def qqstock_activity_task(**kwargs):
         },
         "headers": {
             "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 qqstock/11.10.0 deviceType/iphone",
+            "User-Agent": "QQStock/23110918 CFNetwork/1485 Darwin/23.1.0",
         }
     }
     res = await req(**meta)
     if res and res.json().get("done") == "0":
-        logger.info(f'taskstatus {res.text}')
+        logger.info(f'taskstatus {res.text.strip()}')
         meta["params"].update({"action": "taskticket"})
         res = await req(**meta)
-        logger.info(f'taskticket {res.text}')
+        logger.info(f'taskticket {res.text.strip()}')
         meta["params"].update({"action": "taskdone", "task_ticket": res.json()["task_ticket"]})
         res = await req(**meta)
-        logger.info(f'taskdone {res.text}')
+        logger.info(f'taskdone {res.text.strip()}')
 
 
 # 腾讯自选股日常分享任务
@@ -1255,29 +1444,138 @@ async def qqstock_activity_share(**kwargs):
             "_rndtime": int(time()),
             "_appName": "ios",
             "openid": kwargs.get("openid", ""),
-            "fskey": kwargs.get("fskey", ""),
+            "fskey": kwargs.get("skey", ""),
             "buildType": "store",
             "check": "11",
             "_idfa": "",
             "lang": "zh_CN"
         },
         "headers": {
-            "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 qqstock/11.10.0 deviceType/iphone",
+            # "Referer": "https://wzq.tenpay.com/activity/page/welwareCenterNew/",
+            "User-Agent": "QQStock/23110918 CFNetwork/1485 Darwin/23.1.0",
         }
     }
+    if share_type == "news_share":
+        meta["data"].update({"zappid": "zxg_h5"})
     res = await req(**meta)
-    logger.info(f'share_code {res.text}')
+    logger.info(f'share_code {res.text.strip()}')
     if res and res.json().get("share_code"):
         meta["data"].update({
             "action": "share_code_info",
             "share_type": share_type,
             "share_code": res.json()["share_code"]
         })
+        meta.update({
+            "cookies": {
+                "wzq_qlskey": "",
+                "wzq_qluin": "",
+                "zxg_openid": ""
+            }})
         res = await req(**meta)
         if res:
-            logger.info(f'share_done {res.text}')
+            logger.info(f'share_done {res.text.strip()}')
             return share_type
+
+
+# 长牛任务
+async def qqstock_activity_year_party(**kwargs):
+    actid = kwargs.get("actid", "1105")
+    # 任务领取
+    meta = {
+        "url": "https://zqact03.tenpay.com/cgi-bin/activity_year_party.fcgi",
+        "params": {
+            "invite_code": "",
+            "help_code": "",
+            "share_date": "",
+            "nickname": "",
+            "headimgurl": "",
+            "type": "bullish",
+            "action": "home",
+            "actid": actid,
+            "_": int(time() * 1000),
+            "openid": kwargs.get("openid", ""),
+            "fskey": kwargs.get("skey", ""),
+            "channel": "1",
+            "access_token": "",
+            "_appName": "ios",
+            "_appver": "11.10.0",
+            "_osVer": "17.1.1",
+            "_devId": "",
+            "_ui": ""
+        }
+    }
+    res = await req(**meta)
+    for task in res.json()["task_pkg"][0]["tasks"]:
+        meta.update({
+            "url": "https://zqact03.tenpay.com/cgi-bin/activity_task.fcgi",
+            "params": {
+                "action": "taskstatus",
+                "actid": actid,
+                "tid": task["tid"],
+                "id": task["id"],
+                "_": int(time() * 1000),
+                "openid": kwargs.get("openid", ""),
+                "fskey": kwargs.get("skey", ""),
+                "channel": "1",
+                "access_token": "",
+                "_appName": "ios",
+                "_appver": "11.10.0",
+                "_osVer": "17.1.1",
+                "_devId": "",
+                "_ui": "",
+            }
+        })
+        res = await req(**meta)
+        if res and res.json().get("done") == "0":
+            meta["params"].update({
+                "action": "taskticket",
+                "_": int(time() * 1000),
+            })
+            res = await req(**meta)
+            if res and res.json().get("task_ticket"):
+                meta["params"].update({
+                    "action": "taskdone",
+                    "task_ticket": res.json()["task_ticket"],
+                    "_": int(time() * 1000),
+                })
+                res = await req(**meta)
+                print(res.text.strip())
+    while True:
+        meta.update({
+            "url": "https://zqact03.tenpay.com/cgi-bin/activity_year_party.fcgi",
+            "params": {
+                "type": "bullish",
+                "action": "rock_bullish",
+                "actid": actid,
+                "_": int(time() * 1000),
+                "openid": kwargs.get("openid", ""),
+                "fskey": kwargs.get("skey", ""),
+                "channel": "1",
+                "access_token": "",
+                "_appName": "ios",
+                "_appver": "11.10.0",
+                "_osVer": "17.1.1",
+                "_devId": "",
+                "_ui": ""
+            }
+        })
+        res = await req(**meta)
+        if res.json().get("forbidden_code") == "190721002":
+            break
+        meta["params"].update({"action": "open_box", "_": int(time() * 1000)})
+        res = await req(**meta)
+        await asyncio.sleep(2)
+
+    while True:
+        meta["params"].update({
+            "type": "bullish",
+            "action": "feed",
+        })
+        res = await req(**meta)
+        print(res.text.strip())
+        await asyncio.sleep(1)
+        if res.json().get("retcode") != "0":
+            break
 
 
 # 迪卡侬
@@ -1430,6 +1728,16 @@ async def crontab_task(**kwargs):
  
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
+
+    meta = {
+        "openid": "",
+        "uin": "",
+        # app
+        "skey": "",
+        # wx
+        "wx_skey": "",
+    }
+    await qqstock(**meta)
     return result_list
 
 
