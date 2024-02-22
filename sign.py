@@ -1723,8 +1723,8 @@ async def crontab_task(**kwargs):
         }
     ]
 
-    pre_list = ['jd', 'csai', 'sichuanair', 'dragon_boat_2023', 'meituan', 'weimob', '10086', '10010', 'dp']
-
+    pre_list = ['jd', 'csai', 'sichuanair', 'dragon_boat_2023', 'meituan', 'weimob', '10086', '10010', 'dp', '95516', 'kraf', 'erke', 'honda', 'decathlon', 'ys', 'juejin']
+ 
     for k, v in os.environ.items():
         if k.lower() in pre_list:
             for v_ in v.split(";"):
