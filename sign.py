@@ -55,7 +55,8 @@ description = """
  --erke         [/erke]鸿星尔克账户的memberId值
  --decathlon    [/decathlon]迪卡侬账户的Authorization值
  --ys           [/ys]萤石账户的sessionid值
- 
+ --juejin       [/juejin]掘金账户的sessionid值
+  
  京东pt_pin和pt_key需同时传入！！！
 """
 
@@ -160,7 +161,7 @@ async def token_sign(request: Request, path: str, background_tasks: BackgroundTa
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke, "decathlon": decathlon, "ys": ys}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke, "decathlon": decathlon, "ys": ys, "juejin": juejin}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -1673,6 +1674,42 @@ async def ys(**kwargs):
     await dingAlert(**result)
 
 
+# 掘金
+async def juejin(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入sessionid',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'juejin_{token}', token)
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://api.juejin.cn/growth_api/v1/check_in",
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        },
+        "cookies": {"sessionid_ss": token}
+    }
+    res = await req(**meta)
+    try:
+        if res and res.status_code == 200:
+            logger.info(f'juejin sign {res.text}')
+            result.update({"msg": f'juejin {res.json()["err_msg"]}'})
+        else:
+            cache.delete(f"juejin_{token}")
+    except Exception as e:
+        logger.error(f'掘金 签到程序异常:{e}')
+        cache.delete(f"juejin_{token}")
+        result.update({"msg": f"掘金 {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+ 
+
 # 定时任务
 async def crontab_task(**kwargs):
     account_list = [
@@ -1726,6 +1763,8 @@ async def crontab_task(**kwargs):
     tasks += [asyncio.create_task(decathlon(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("decathlon")]
     # 萤石
     tasks += [asyncio.create_task(ys(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("ys")]
+    # 掘金
+    tasks += [asyncio.create_task(juejin(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("juejin")]
  
     result_list = await asyncio.gather(*tasks)
     # logger.info(result_list)
