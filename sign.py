@@ -1705,7 +1705,10 @@ async def juejin(**kwargs):
         logger.error(f'掘金 签到程序异常:{e}')
         cache.delete(f"juejin_{token}")
         result.update({"msg": f"掘金 {token} 签到程序异常"})
-
+    # 抽奖
+    meta.update({"url": "https://api.juejin.cn/growth_api/v1/lottery/draw"})
+    await req(**meta)
+ 
     # 钉钉通知
     await dingAlert(**result)
  
