@@ -56,6 +56,8 @@ description = """
  --decathlon    [/decathlon]迪卡侬账户的Authorization值
  --ys           [/ys]萤石账户的sessionid值
  --juejin       [/juejin]掘金账户的sessionid值
+ --tuhu         [/tuhu]途虎养车账户的Authorization值
+
   
  京东pt_pin和pt_key需同时传入！！！
 """
@@ -161,7 +163,7 @@ async def token_sign(request: Request, path: str, background_tasks: BackgroundTa
               token: Union[str, None] = Body(default="XXX"), time: Union[str, None] = Body(default="09:00:00")):
     result = {"code": 400, "msg": "请检查路由路径!"}
     data_time = parse(time)
-    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke, "decathlon": decathlon, "ys": ys, "juejin": juejin}
+    path_dict = {"csairSign": csairSign, "sichuanairSign": sichuanairSign, "ctripSign": ctripSign, "dragon_boat_2023":dragon_boat_2023, "meituan": meituan, "weimob": weimob, "10086": m10086, "10010": m10010, "dp": youzan_dp, "95516": m95516, "kraf": kraf, "erke": demogic_erke, "decathlon": decathlon, "ys": ys, "juejin": juejin, "tuhu": tuhu}
     if path in path_dict.keys():
         background_tasks.add_task(path_dict[path], **{"token": token})
         scheduler.add_job(id=token, name=f'{token}', func=path_dict[path], kwargs={"token": token}, trigger='cron', hour=data_time.hour, minute=data_time.minute, second=data_time.second, replace_existing=True)
@@ -1711,7 +1713,47 @@ async def juejin(**kwargs):
  
     # 钉钉通知
     await dingAlert(**result)
- 
+
+
+# 途虎养车
+async def tuhu(**kwargs):
+    result = {
+        "code": 400,
+        "msg": f'请输入Authorization',
+        "time": int(time())
+    }
+    token = kwargs.get("token", "")
+    if not token:
+        return result
+    cache.set(f'tuhu_{token}', token)
+    # 签到
+    meta = {
+        "method": "GET",
+        "url": "https://api.tuhu.cn/user/UserCheckInVersion1",
+        "params": {
+            "channel": "wxapp",
+        },
+        "headers": {
+            "Authorization": token if token.startswith("Bearer") else f"Bearer {token}",
+            "blackbox": "sMPSo1708653812YYEWM5GF936",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.47(0x18002f28) NetType/4G Language/zh_CN",
+        }
+    }
+    res = await req(**meta)
+    try:
+        if res and res.status_code == 200:
+            logger.info(f'途虎 sign {res.text}')
+            result.update({"msg": f'途虎 {res.json()["Message"]}'})
+        else:
+            cache.delete(f"tuhu_{token}")
+    except Exception as e:
+        logger.error(f'途虎 签到程序异常:{e}')
+        cache.delete(f"tuhu_{token}")
+        result.update({"msg": f"途虎 {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+
 
 # 定时任务
 async def crontab_task(**kwargs):
