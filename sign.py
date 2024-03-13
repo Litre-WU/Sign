@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 from httpx import AsyncClient
 from time import time, sleep, asctime
