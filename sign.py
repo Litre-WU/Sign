@@ -16,7 +16,7 @@ import hashlib
 from base64 import b64encode
 from pathlib import Path
 from uuid import uuid4
-from random import uniform, sample
+from random import uniform, sample, choice
 from urllib.parse import urlparse, parse_qs
 from http import cookies
 
@@ -31,7 +31,7 @@ from dateutil.parser import parse
 import socket
 import sys
 import os
-
+import string
 
 db_path = str(Path(__file__).parent / "tmp")
 
@@ -1751,6 +1751,70 @@ async def tuhu(**kwargs):
         logger.error(f'途虎 签到程序异常:{e}')
         cache.delete(f"tuhu_{token}")
         result.update({"msg": f"途虎 {token} 签到程序异常"})
+
+    # 钉钉通知
+    await dingAlert(**result)
+
+
+# 爱奇艺
+async def iqiyi(**kwargs):
+    P00001 = kwargs.get("P00001", "")
+    P00003 = kwargs.get("P00003", "")
+    result = {
+        "code": 400,
+        "msg": f'请输入P00001及P00003',
+        "time": int(time())
+    }
+    if not all([P00001, P00003]):
+        return result
+
+    qyid = hashlib.md5("".join(choice(string.ascii_letters + string.digits) for _ in range(16)).encode()).hexdigest()
+
+    params = {
+        "agentType": "1",
+        "agentversion": "1.0",
+        "appKey": "basic_pcw",
+        "authCookie": P00001,
+        "qyid": qyid,
+        "task_code": "natural_month_sign",
+        "timestamp": int(time() * 1000),
+        "typeCode": "point",
+        "userId": P00003,
+    }
+    params_list = [f'{k}={v}' for k, v in params.items()]
+    params_list.append("UKobMjDMsDoScuWOfp6F")
+    sign = hashlib.md5("|".join(params_list).encode()).hexdigest()
+    params.update({"sign": sign})
+    data = {
+        "natural_month_sign": {
+            "agentType": "1",
+            "agentversion": "1",
+            "authCookie": P00001,
+            "qyid": qyid,
+            "taskCode": "iQIYI_mofhr",
+            "verticalCode": "iQIYI"
+        }
+    }
+    # 签到
+    meta = {
+        "method": "POST",
+        "url": "https://community.iqiyi.com/openApi/task/execute",
+        "params": params,
+        "json": data,
+        "headers": {"Content-Type": "application/json"}
+    }
+    res = await req(**meta)
+    try:
+        if res and res.status_code == 200:
+            logger.info(f'爱奇艺 签到 {res.text}')
+            result.update({"msg": f'爱奇艺 签到  {res.json()["message"]}'})
+            cache.set(f'iqiyi_{P00003}', P00001)
+        else:
+            cache.delete(f'iqiyi_{P00003}')
+    except Exception as e:
+        logger.error(f'爱奇艺 签到  :{e}')
+        cache.delete(f'iqiyi_{P00003}')
+        result.update({"msg": f"爱奇艺 签到 {P00003} 程序异常"})
 
     # 钉钉通知
     await dingAlert(**result)
