@@ -5,7 +5,7 @@
 
 [使用教程](https://www.1itre.link/2024/02/21/%E6%AF%8F%E6%97%A5%E7%AD%BE%E5%88%B0/)
 
-![视频教程](https://pkohzabcybje8yzc.public.blob.vercel-storage.com/Kapture%202024-04-21%20at%2014.25.02-EbhULIhqe4E1cvHXImmExqRRr7phe1.gif)
+![视频教程](screen_recording.gif)
 
 <img src=https://pkohzabcybje8yzc.public.blob.vercel-storage.com/Kapture%202024-04-21%20at%2014.25.02-EbhULIhqe4E1cvHXImmExqRRr7phe1.gif width=250/>
 
