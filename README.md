@@ -5,8 +5,6 @@
 
 [使用教程](https://www.1itre.link/2024/02/21/%E6%AF%8F%E6%97%A5%E7%AD%BE%E5%88%B0/)
 
-![视频教程](https://github.com/Litre-WU/Sign/blob/master/screen_recording.gif)
-
 ```bash
 pip install uvicorn fastapi websockets httpx loguru diskcache apscheduler SQLAlchemy python-dateutil -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
@@ -32,6 +30,8 @@ uvicorn sign:app --host 0.0.0.0 --port 8081
 ```
 
 访问 [http://127.0.0.1:8081/docs](http://127.0.0.1:8081/docs) 通过接口添加账户token等
+
+![视频教程](https://github.com/Litre-WU/Sign/blob/master/screen_recording.gif)
 
 #### 开发描述
 程序主要使用fastapi开发的接口，请求库主要使用httpx，定时调度器使用的是apschedule，数据库使用的是sqlite，缓存使用的是diskcache,调度器和缓存是共用同一个sqlite数据库，使用sqlite数据库主要是减少环境依赖和方便，也方便的查看任务执行情况。当然也可以换成其它数据库，修改一些脚本数据库配置即可。
