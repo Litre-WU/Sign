@@ -7,8 +7,6 @@
 
 ![视频教程](https://github.com/Litre-WU/Sign/blob/master/screen_recording.gif)
 
-<img src=https://github.com/Litre-WU/Sign/blob/master/screen_recording.gif width=250/>
-
 ```bash
 pip install uvicorn fastapi websockets httpx loguru diskcache apscheduler SQLAlchemy python-dateutil -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
