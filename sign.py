@@ -79,7 +79,8 @@ for i, arg in enumerate(args):
                 if k == "pt_pin":
                     for i_, v_ in enumerate(v.split(";")):
                         try:
-                            cache.set(v_, args[i + 3].split(";")[i_])
+                            # cache.set(v_, args[i + 3].split(";")[i_])
+                            cache.set(f'jd_{v_}', args[i + 3].split(";")[i_])
                         except:
                             pass
             else:
@@ -150,7 +151,8 @@ async def shutdown_event():
 async def jd_sign(request: Request, background_tasks: BackgroundTasks,
               pt_pin: Union[str, None] = Body(default="jd_XXX"),
               pt_key: Union[str, None] = Body(default="AAJkPgXXX_XXX"), time: Union[str, None] = Body(default="09:00:00")):
-    cache.set(pt_pin, pt_key)
+    # cache.set(pt_pin, pt_key)
+    cache.set(f'jd_{pt_pin}', pt_key)
     data_time = parse(time)
     background_tasks.add_task(signBeanAct, **{"pt_pin": pt_pin, "pt_key": pt_key})
     task_id = str(uuid4())
@@ -1843,7 +1845,7 @@ async def crontab_task(**kwargs):
     # tasks = [asyncio.create_task(signBeanAct(**account_list[i])) for i in range(len(account_list))]
     # tasks = []
     # 京豆任务
-    tasks = [asyncio.create_task(signBeanAct(**{"pt_pin": k, "pt_key": cache[k]})) for k in cache.iterkeys() if
+    tasks = [asyncio.create_task(signBeanAct(**{"pt_pin": k.strip("jd_"), "pt_key": cache[k]})) for k in cache.iterkeys() if
              k.startswith("jd_")]
     # 南航任务
     tasks += [asyncio.create_task(csairSign(**{"token": cache[k]})) for k in cache.iterkeys() if k.startswith("csai_")]
@@ -1887,7 +1889,10 @@ async def crontab_task(**kwargs):
         # wx
         "wx_skey": "",
     }
-    await qqstock(**meta)
+    try:
+        await qqstock(**meta)
+    except:
+        pass
     return result_list
 
 
