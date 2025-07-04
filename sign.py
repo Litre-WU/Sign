@@ -217,20 +217,30 @@ manager = ConnectionManager()
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: int, background_tasks: BackgroundTasks):
-    print(websocket.client.host, client_id, websocket.query_params._dict)
+    logger.info(f'{websocket.client.host} {client_id} {websocket.query_params._dict}')
     await manager.connect(websocket)
-    await asyncio.sleep(2)
     try:
         while True:
             data = await websocket.receive_text()
-            print(data)
-            await manager.send_personal_message(data, websocket)
-            await asyncio.sleep(2)
-            await manager.send_personal_message("任务已完成！", websocket)
-            # await manager.broadcast(f"{client_id} : {data}")
+            logger.info(data)
+            if text == "open":
+                await manager.send_personal_message(json.dumps(cache.get("items", {})), websocket)
+            if text == "close":
+                await manager.send_personal_message("close", websocket)
+            if text.startswith("all"):
+                for k, v in eval(text.lstrip("all_")).items():
+                    cache.set(k, v)
+                    # await verify(k, cookies=v)
+                    await manager.send_personal_message(json.dumps(cache.get("items", {})), websocket)
+            if text.startswith("update"):
+                for k, v in eval(text.lstrip("update_")).items():
+                    cache.set(k, {**cache.get(k, {}), **v})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        await manager.broadcast(f"{client_id} 下线！")
+        try:
+            await manager.broadcast(f"{client_id} downline")
+        except:
+            pass
 
 
 # 请求函数
